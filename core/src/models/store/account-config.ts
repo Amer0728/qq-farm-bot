@@ -131,6 +131,34 @@ interface ApplyConfigSnapshotOptions {
     accountId?: unknown;
 }
 
+const SWEET_POTATO_PRICE_TIERS = new Set(['super', 'high', 'any']);
+
+/**
+ * 以薯换福的设置里有布尔、枚举、数字、时间串四种类型，
+ * 而 automation 的通用分支会把一切强制成布尔（`!!v`），所以这里单独归一化。
+ */
+function normalizeSweetPotatoSetting(key: string, value: unknown): unknown {
+    const fallback = (sharedState.DEFAULT_ACCOUNT_CONFIG.automation as any)[key];
+    if (typeof fallback === 'boolean') return value === true;
+    if (key === 'sweetPotatoPriceTier') {
+        const tier = String(value ?? '').trim();
+        return SWEET_POTATO_PRICE_TIERS.has(tier) ? tier : fallback;
+    }
+    if (key === 'sweetPotatoSellAfterTime') {
+        const raw = String(value ?? '').trim();
+        if (!raw) return '';
+        return /^(\d{1,2})[:：](\d{1,2})$/.test(raw) ? raw.replace('：', ':') : fallback;
+    }
+    const num = Number(value);
+    if (!Number.isFinite(num)) return fallback;
+    const int = Math.floor(num);
+    if (key === 'sweetPotatoKeepCount') return Math.max(0, int);
+    if (key === 'sweetPotatoCheckIntervalMinutes') return Math.min(180, Math.max(1, int));
+    if (key === 'sweetPotatoScanFriendLimit') return Math.min(60, Math.max(1, int));
+    if (key === 'sweetPotatoScanIntervalMinutes') return Math.min(720, Math.max(5, int));
+    return fallback;
+}
+
 function applyConfigSnapshot(snapshot: Record<string, any> | undefined, options: ApplyConfigSnapshotOptions = {}): ReturnType<typeof getConfigSnapshot> {
     const cfg: Record<string, any> = snapshot || {};
     if (Object.hasOwn(cfg, 'emailClaimHour')) assertEmailClaimHour(cfg.emailClaimHour);
@@ -152,6 +180,8 @@ function applyConfigSnapshot(snapshot: Record<string, any> | undefined, options:
                 (next.automation as any)[k] = normalizeRanchSetting(k, v);
             } else if (k === 'fertilizer_smart_seconds') {
                 (next.automation as any)[k] = Math.max(30, Math.min(3600, Number(v) || 300));
+            } else if (k.startsWith('sweetPotato')) {
+                (next.automation as any)[k] = normalizeSweetPotatoSetting(k, v);
             } else {
                 (next.automation as any)[k] = !!v;
             }

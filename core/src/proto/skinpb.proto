@@ -16,6 +16,9 @@ message SkinsOwnedRequest {}
 
 message SkinsOwnedReply {
     repeated SkinItem skins = 1;
+    // 1.17.1.10 抓包新增（2026-11-25），样例 08e1e80c，即单字段 varint（约 210017）。
+    // 疑似哈希或位图，语义未解码，按原始字节保留。
+    bytes field_2 = 2;
 }
 
 // --- 获取已装备皮肤 ---

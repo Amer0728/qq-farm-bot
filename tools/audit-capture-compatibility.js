@@ -15,11 +15,18 @@ const protoDir = path.resolve(__dirname, '../core/src/proto');
 
 const rpcTypes = {
     'gamepb.userpb.UserService.Login': ['gamepb.userpb.LoginRequest', 'gamepb.userpb.LoginReply'],
+    // 1.15 起官方把玩家登录与农场场景登录拆成两段，1.17.1.10 抓包首帧即为 PlayerLogin。
+    'gamepb.userpb.UserService.PlayerLogin': ['gamepb.userpb.PlayerLoginRequest', 'gamepb.userpb.PlayerLoginReply'],
+    'gamepb.globalscenepb.GlobalSceneService.PlayerSceneLogin': ['gamepb.globalscenepb.PlayerSceneLoginRequest', 'gamepb.globalscenepb.PlayerSceneLoginReply'],
     'gamepb.userpb.UserService.GetUserSettings': ['gamepb.userpb.GetUserSettingsRequest', 'gamepb.userpb.GetUserSettingsReply'],
     'gamepb.userpb.UserService.SetDisplayInfo': ['gamepb.userpb.SetDisplayInfoRequest', 'gamepb.userpb.SetDisplayInfoReply'],
     'gamepb.userpb.UserService.BatchClientReportFlow': ['gamepb.userpb.BatchClientReportFlowRequest', 'gamepb.userpb.BatchClientReportFlowReply'],
     'gamepb.userpb.UserService.Heartbeat': ['gamepb.userpb.HeartbeatRequest', 'gamepb.userpb.HeartbeatReply'],
     'gamepb.mysteryshoppb.MysteryShopService.GetActiveNPC': ['gamepb.mysteryshoppb.GetActiveNPCRequest', 'gamepb.mysteryshoppb.GetActiveNPCReply'],
+    // 1.17.1.10 新增的三个协议面（2026-11-25 抓包确认）。
+    'msgboardpb.MsgBoardService.GetMsgBoardProfile': ['msgboardpb.GetMsgBoardProfileRequest', 'msgboardpb.GetMsgBoardProfileReply'],
+    'gamepb.iaapb.IaaService.GetAdUnits': ['iaapb.GetAdUnitsRequest', 'iaapb.GetAdUnitsReply'],
+    'gamepb.solartermspb.SolarTermsV2Service.GetSolarTermsV2RedDot': ['gamepb.solartermspb.GetSolarTermsV2RedDotRequest', 'gamepb.solartermspb.GetSolarTermsV2RedDotReply'],
     'gamepb.friendpb.FriendService.GetShareKey': ['gamepb.friendpb.GetShareKeyRequest', 'gamepb.friendpb.GetShareKeyReply'],
     'gamepb.friendpb.FriendService.SyncAll': ['gamepb.friendpb.SyncAllRequest', 'gamepb.friendpb.SyncAllReply'],
     'gamepb.qqvippb.QQVipService.GetQQVipRewardsStatus': ['gamepb.qqvippb.GetQQVipRewardsStatusRequest', 'gamepb.qqvippb.GetQQVipRewardsStatusReply'],
@@ -28,6 +35,8 @@ const rpcTypes = {
     'gamepb.uicproxypb.UicprotoxyService.BatchModerateText': ['gamepb.uicproxypb.BatchModerateTextRequest', 'gamepb.uicproxypb.BatchModerateTextReply'],
     'gamepb.acepb.AceService.AntiData': ['gamepb.acepb.AntiDataRequest', 'gamepb.acepb.AntiDataReply'],
     'gamepb.plantpb.PlantService.AllLands': ['gamepb.plantpb.AllLandsRequest', 'gamepb.plantpb.AllLandsReply'],
+    'gamepb.plantpb.PlantService.Fertilize': ['gamepb.plantpb.FertilizeRequest', 'gamepb.plantpb.FertilizeReply'],
+    'gamepb.plantpb.PlantService.Harvest': ['gamepb.plantpb.HarvestRequest', 'gamepb.plantpb.HarvestReply'],
     'gamepb.illustratedpb.IllustratedService.GetIllustratedListV2': ['gamepb.illustratedpb.GetIllustratedListV2Request', 'gamepb.illustratedpb.GetIllustratedListV2Reply'],
     'gamepb.illustratedpb.IllustratedService.GetIllustratedLevelListV2': ['gamepb.illustratedpb.GetIllustratedLevelListV2Request', 'gamepb.illustratedpb.GetIllustratedLevelListV2Reply'],
     'gamepb.illustratedpb.IllustratedService.ClearNewUnlockedFruitsV2': ['gamepb.illustratedpb.ClearNewUnlockedFruitsV2Request', 'gamepb.illustratedpb.ClearNewUnlockedFruitsV2Reply'],

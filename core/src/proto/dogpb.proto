@@ -20,6 +20,12 @@ message DogInfo {
     // ActivateDog 回包与紧随其后的 GetDogInfo 均为 1，ViewDog 之后消失；
     // 语义尚未完全证明，疑似“新获得未查看”标记，当前不参与业务判断。
     int64 field_10 = 10;
+    // 1.17.1.10 抓包新增（2026-11-25），均为嵌套消息：
+    //   field_13 每条狗都有，内容固定为 20 03（即 field_4=3）
+    //   field_12 仅部分狗出现，样例 08babf051801（field_1=87610, field_3=1）
+    // 语义未解码，按原始字节保留。
+    bytes field_12 = 12;
+    bytes field_13 = 13;
 }
 
 // 狗狗装备/道具

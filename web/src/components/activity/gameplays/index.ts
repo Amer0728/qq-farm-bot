@@ -5,6 +5,7 @@ import { petGameplay } from './pet'
 import { qingMeiGameplay } from './qingmei'
 import { qixiGameplay } from './qixi'
 import { stellarGameplay } from './stellar'
+import { sweetPotatoGameplay } from './sweet'
 import { weatherGameplay } from './weather'
 
 const gameplayModules: Record<ActivityGameplayKey, ActivityGameplayModule> = {
@@ -18,6 +19,7 @@ const gameplayModules: Record<ActivityGameplayKey, ActivityGameplayModule> = {
   qingmei: qingMeiGameplay,
   charity: charityGameplay,
   weather: weatherGameplay,
+  sweet: sweetPotatoGameplay,
 }
 
 function inferGameplayKey(activity: ActivityDirectoryItemDto): ActivityGameplayKey | null {
@@ -31,6 +33,10 @@ function inferGameplayKey(activity: ActivityDirectoryItemDto): ActivityGameplayK
     return 'weather'
   if (activity.detailTarget === 'charity')
     return 'charity'
+  if (activity.detailTarget === 'sweet')
+    return 'sweet'
+  if (activity.activityIds.some(id => id === '2026111708') || activity.name.includes('以薯换福'))
+    return 'sweet'
   if (activity.detailTarget === 'qixi')
     return 'qixi'
   if (activity.detailTarget === 'qingmei')

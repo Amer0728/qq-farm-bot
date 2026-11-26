@@ -337,6 +337,34 @@ function logRequestPressure(): void {
     logWarn('系统', `Gateway 请求压力: pending=${pendingCallbacks.size}, queued=${requestQueue.length}, active=${describePendingRequests()}, queuedMethods=${describeQueuedRequests()}`);
 }
 
+// ============ 帧级调试日志（FARM_FRAME_DEBUG=1 时启用）============
+// 排障用：把每一帧原始字节按方向落盘，便于和官方抓包逐帧比对。
+// 只在前 N 帧记录，避免长时间挂机把磁盘写满。
+const FRAME_DEBUG_LIMIT = 500;
+let frameDebug: { fd: number; count: number } | null = null;
+
+function logFrame(direction: 'IN' | 'OUT', buf: Buffer): void {
+    if (process.env.FARM_FRAME_DEBUG !== '1') return;
+    try {
+        if (!frameDebug) {
+            const fs = require('node:fs');
+            const path = require('node:path');
+            const { getRuntimePaths } = require('../config/runtime-paths');
+            const file = path.join(getRuntimePaths().dataDir, 'logs', 'frames.log');
+            fs.mkdirSync(path.dirname(file), { recursive: true });
+            frameDebug = { fd: fs.openSync(file, 'a'), count: 0 };
+        }
+        if (frameDebug.count >= FRAME_DEBUG_LIMIT) return;
+        frameDebug.count += 1;
+        require('node:fs').writeSync(
+            frameDebug.fd,
+            `${new Date().toISOString()} ${direction} ${buf.length} ${buf.toString('hex')}\n`,
+        );
+    } catch {
+        // 调试日志失败绝不影响主流程
+    }
+}
+
 // ============ 用户状态 (登录后设置) ============
 const userState = {
     gid: 0,
@@ -454,6 +482,7 @@ async function sendMsg(context: ConnectionContext, serviceName: string, methodNa
         const blocked = hooks?.beforeSend?.();
         if (blocked) throw blocked;
         try {
+            logFrame('OUT', Buffer.from(encoded));
             context.socket.send(encoded);
             hooks?.onSent?.();
         } catch (err: any) {
@@ -960,11 +989,21 @@ function buildLoginBody(clientVersion = getClientVersion()): Buffer {
         share_cfg_id: toLong(0),
         // A standalone WeChat Code does not supply its entry-dependent launch scene.
         scene_id: isWechatPlatform() ? undefined : '1234567',
-        report_data: {
-            ...(modern ? {} : { callback: '', cd_extend_info: '', click_id: '', clue_token: '', req_id: '', trackid: '' }),
-            minigame_channel: isWechatPlatform() ? 'other' : 'other-qq',
-            minigame_platid: 2,
-        },
+        // 1.17.1.10 的 QQ 官方 PlayerLogin 重新带上这六个空字段（抓包 ws_00001，76 字节），
+        // 与历史单阶段 Login 布局一致；缺失时服务端仍接受，但对齐后逐字节一致。
+        // 微信侧本轮没有抓包证据，保持原布局不动。
+        report_data: isWechatPlatform()
+            ? { minigame_channel: 'other', minigame_platid: 2 }
+            : {
+                    callback: '',
+                    cd_extend_info: '',
+                    click_id: '',
+                    clue_token: '',
+                    minigame_channel: 'other-qq',
+                    minigame_platid: 2,
+                    req_id: '',
+                    trackid: '',
+                },
         ...(modern ? { share_key: '', game_scene_id: 1 } : { extra: Buffer.alloc(0) }),
     })).finish());
 }
@@ -1129,6 +1168,15 @@ function startHeartbeat(context: ConnectionContext): void {
             if (!shouldTerminateForHeartbeat(heartbeatMissCount, inboundSilenceMs)) return;
 
             log('心跳', '连续心跳超时且连接无入站数据，账号将停止运行...');
+            // 这条形态很固定：登录回包之后一条入站都没有，请求全部 stage=pending。
+            // 常见原因是同一账号在游戏/小程序端同时在线（服务端把逻辑会话切走），
+            // 或一次性 Code 已被别处消费。日志里直接写清楚，省得下次再翻抓包。
+            logWarn(
+                '诊断',
+                `连接静默：入站静默 ${Math.round(inboundSilenceMs / 1000)}s、在途 ${pendingCallbacks.size} 条（${describePendingRequests()}）。`
+                + '若此时游戏/小程序仍在线，请先退出游戏端，再用新 Code 重新登录本账号。',
+                { event: 'gateway_silent_diagnosis', inboundSilenceSec: Math.round(inboundSilenceMs / 1000) },
+            );
             finalizeConnection(context, {
                 source: 'heartbeat_timeout',
                 reason: `${Math.round(inboundSilenceMs / 1000)}s 无入站数据，连续 ${heartbeatMissCount} 次心跳失败`,
@@ -1231,12 +1279,25 @@ function connect(code: string | null, onLoginSuccess?: () => void): void {
         code: authCode,
     }).toString();
     const di = CONFIG.deviceInfo || {};
+    // 握手头按官方客户端对齐（2026-11-26 抓包 handshake_001）：
+    //   QQ 小程序页运行在 file:// 上下文，Origin 为 file://，Referer 指向 appservice 的 page-frame；
+    //   UA 带 QQEX/<QQ 版本> 与 pcminiapp/<小程序内核版本>。
+    // 微信侧没有抓到同类样本，维持原有取值不动。
+    const WECHAT_WS_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36 MicroMessenger/7.0.20.1781(0x6700143B) NetType/WIFI MiniProgramEnv/Windows WindowsWechat/WMPF WindowsWechat(0x63090a13)';
+    const QQ_WS_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) QQEX/9.9.37-54395 Chrome/144.0.7559.60 Electron/40.0.0 Safari/537.36 pcminiapp/3.3.18';
+    const wechatSide = isWechatPlatform();
     const socket = new WebSocket(url.toString(), {
         handshakeTimeout: 20000,
-        headers: {
-            'User-Agent': di.userAgent || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36 MicroMessenger/7.0.20.1781(0x6700143B) NetType/WIFI MiniProgramEnv/Windows WindowsWechat/WMPF WindowsWechat(0x63090a13)',
-            'Origin': 'https://gate-obt.nqf.qq.com',
-        },
+        headers: wechatSide
+            ? {
+                    'User-Agent': di.userAgent || WECHAT_WS_UA,
+                    'Origin': 'https://gate-obt.nqf.qq.com',
+                }
+            : {
+                    'User-Agent': /QQEX|pcminiapp/i.test(String(di.userAgent || '')) ? String(di.userAgent) : QQ_WS_UA,
+                    'Origin': 'file://',
+                    'Referer': 'https://appservice.qq.com/1112386029/pc-v3.3.18/page-frame.html',
+                },
     });
     const context: ConnectionContext = {
         id: nextConnectionId++,
@@ -1271,6 +1332,7 @@ function connect(code: string | null, onLoginSuccess?: () => void): void {
     (socket as any).on('message', (data: any, _isBinary: any) => {
         if (!isCurrentConnection(context)) return;
         const buf = Buffer.isBuffer(data) ? data : Buffer.from(data as any);
+        logFrame('IN', buf);
         handleMessage(buf);
     });
 

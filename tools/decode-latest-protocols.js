@@ -28,6 +28,11 @@ const selected = new Set([
     'gamepb.friendpb.FriendService.GetGameFriends',
     'gamepb.bulletinboardpb.BulletinBoardService.GetBulletinList',
     'gamepb.userpb.UserService.GetUserSettings',
+    'gamepb.userpb.UserService.PlayerLogin',
+    'gamepb.globalscenepb.GlobalSceneService.PlayerSceneLogin',
+    'msgboardpb.MsgBoardService.GetMsgBoardProfile',
+    'gamepb.iaapb.IaaService.GetAdUnits',
+    'gamepb.solartermspb.SolarTermsV2Service.GetSolarTermsV2RedDot',
     'gamepb.userpb.UserService.BatchClientReportFlow',
     'gamepb.uicproxypb.UicprotoxyService.BatchModerateText',
     'gamepb.qqvippb.QQVipService.GetQQVipRewardsStatus',
@@ -162,6 +167,13 @@ function wireShape(buffer) {
 function knownType(root, service, method, messageType) {
     const request = messageType === 1;
     const names = {
+        // 1.15 起的两段式登录，1.17.1.10 抓包首帧即为 PlayerLogin。
+        'gamepb.userpb.UserService.PlayerLogin': request ? 'gamepb.userpb.PlayerLoginRequest' : 'gamepb.userpb.PlayerLoginReply',
+        'gamepb.globalscenepb.GlobalSceneService.PlayerSceneLogin': request ? 'gamepb.globalscenepb.PlayerSceneLoginRequest' : 'gamepb.globalscenepb.PlayerSceneLoginReply',
+        // 1.17.1.10 新增的三个协议面（2026-11-25 抓包确认）。
+        'msgboardpb.MsgBoardService.GetMsgBoardProfile': request ? 'msgboardpb.GetMsgBoardProfileRequest' : 'msgboardpb.GetMsgBoardProfileReply',
+        'gamepb.iaapb.IaaService.GetAdUnits': request ? 'iaapb.GetAdUnitsRequest' : 'iaapb.GetAdUnitsReply',
+        'gamepb.solartermspb.SolarTermsV2Service.GetSolarTermsV2RedDot': request ? 'gamepb.solartermspb.GetSolarTermsV2RedDotRequest' : 'gamepb.solartermspb.GetSolarTermsV2RedDotReply',
         'gamepb.activitypb.ActivityService.List': request ? 'gamepb.activitypb.ActivityListRequest' : 'gamepb.activitypb.ActivityListReply',
         'gamepb.friendpb.FriendService.GetGameFriends': request ? 'gamepb.friendpb.GetGameFriendsRequest' : 'gamepb.friendpb.GetGameFriendsReply',
         'gamepb.friendpb.FriendService.SyncAll': request ? 'gamepb.friendpb.SyncAllRequest' : 'gamepb.friendpb.SyncAllReply',

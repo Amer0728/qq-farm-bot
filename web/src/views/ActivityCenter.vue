@@ -19,6 +19,7 @@ import MugePage from './activity-center/MugePage.vue'
 import PetDiaryPage from './activity-center/PetDiaryPage.vue'
 import QingMeiActivityPage from './activity-center/QingMeiActivityPage.vue'
 import QixiActivityPage from './activity-center/QixiActivityPage.vue'
+import SweetPotatoPage from './activity-center/SweetPotatoPage.vue'
 import StellarActivityPage from './activity-center/StellarActivityPage.vue'
 import WeatherActivityPage from './activity-center/WeatherActivityPage.vue'
 
@@ -155,6 +156,7 @@ onUnmounted(() => {
     @back="goBack"
   />
   <PetDiaryPage v-else-if="selectedActivity === 'pet'" @back="goBack" />
+  <SweetPotatoPage v-else-if="selectedActivity === 'sweet'" @back="goBack" />
 </template>
 
 <style>

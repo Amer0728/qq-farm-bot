@@ -7,6 +7,9 @@ import "corepb.proto";
 // ============ 物品变化通知 ============
 message ItemNotify {
     repeated corepb.ItemChg items = 1;
+    // 1.17.1.10 抓包新增（2026-11-25）：顶层还有一个 varint，样本取值 30 / 1 / -1。
+    // 疑似本次变化条目数或总增量，语义未定，不参与业务判断。
+    int64 field_2 = 2;
 }
 
 message ItemUseDailyLimit {

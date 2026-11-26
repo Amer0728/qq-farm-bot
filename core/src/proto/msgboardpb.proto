@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package msgboardpb;
+
+// MsgBoardService.GetMsgBoardProfile —— 1.17.1.10 抓包新增（2026-11-25）。
+// 客户端在进入农场前会拉一次留言板（个性签名）资料；仓库此前没有该服务的任何定义。
+// 抓包样例：请求 6 字节 {gid}，回包 179 字节 {profile}。
+
+message GetMsgBoardProfileRequest {
+    int64 gid = 1;
+}
+
+// profile.welcome：回包里与 signature 同值的嵌套块，带 welcome_id。
+message MsgBoardWelcome {
+    string signature = 1;      // 与 profile.signature 同值
+    int64 updated_at = 2;      // 秒级时间戳
+    string welcome_id = 3;     // 例：welcome_1008793205_1791455495
+    int64 field_4 = 4;         // 抓包值 1
+    int64 field_5 = 5;         // 抓包值 1
+}
+
+message MsgBoardProfile {
+    string signature = 1;      // 例：「随便偷，我这菜偷着不烧心」
+    int64 updated_at = 2;      // 秒级时间戳
+    MsgBoardWelcome welcome = 3;
+    // 43 字符 base64 风格串，是否参与校验未验证。
+    string token = 7;
+    int64 field_8 = 8;         // 秒级时间戳
+}
+
+message GetMsgBoardProfileReply {
+    MsgBoardProfile profile = 1;
+}

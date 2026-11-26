@@ -511,6 +511,46 @@ function startBusinessLoops(): void {
     startUnifiedScheduler();
     startDailyRoutineTimer(false);
     startMysteryShopTimer();
+    startSweetPotatoTimer();
+}
+
+// ===== 以薯换福自动化（2026-11-25/26 抓包还原）=====
+const SWEET_POTATO_TICK_MS = 60 * 1000;
+let sweetPotatoLastRunAt = 0;
+
+async function runSweetPotatoTick(options: { manual?: boolean } = {}): Promise<void> {
+    if (!loginReady) return;
+    const { readSweetPotatoSettings, runSweetPotatoAutomation } = require('../services/sweet-potato');
+    const settings = readSweetPotatoSettings();
+    if (!options.manual && !settings.autoSell && !settings.autoExchange) return;
+    if (!options.manual) {
+        const intervalMs = Math.max(1, Number(settings.checkIntervalMinutes) || 10) * 60000;
+        if (Date.now() - sweetPotatoLastRunAt < intervalMs) return;
+        // 网关不健康时让路，避免和心跳抢连接。
+        if (!isGatewayHealthyForBusiness(getGatewayLoad())) return;
+    }
+    sweetPotatoLastRunAt = Date.now();
+    const result = await runSweetPotatoAutomation({ manual: options.manual === true });
+    if (!result || result.skipped) return;
+    const steps = Array.isArray(result.steps) ? result.steps : [];
+    const crit = steps.find((step: any) => step.step === 'share_crit');
+    const sell = steps.find((step: any) => step.step === 'sell');
+    const exchange = steps.find((step: any) => step.step === 'exchange');
+    log('活动', `以薯换福一轮：暴击${crit && crit.gained > 0 ? `+${crit.gained}` : '无'}，`
+        + `出售${sell ? `${sell.count} 个/${sell.totalGain} 币${sell.toFriend ? `（卖给${sell.friendName || '好友'}）` : ''}` : '跳过'}，`
+        + `兑换${exchange && exchange.bought.length ? `${exchange.bought.length} 件` : '无'}`, {
+        module: 'activity',
+        event: 'sweet_potato_round',
+        result: 'ok',
+    });
+}
+
+function startSweetPotatoTimer(): void {
+    workerScheduler.clear('sweet_potato_interval');
+    if (!loginReady) return;
+    workerScheduler.setIntervalTask('sweet_potato_interval', SWEET_POTATO_TICK_MS, () => {
+        runExclusiveAutomationTask('sweet_potato', () => runSweetPotatoTick()).catch(() => null);
+    });
 }
 
 function runMysteryShopTick(): Promise<void> {
@@ -1124,6 +1164,43 @@ async function handleApiCall(msg: any): Promise<void> {
                     break;
                 case 'getCurrentQixiActivity':
                     result = await require('../services/activity-center').getCurrentQixiActivity();
+                    break;
+                // 以薯换福（2026-11-25 抓包还原）
+                case 'getSweetPotatoState':
+                    result = await require('../services/sweet-potato').getSweetPotatoState();
+                    break;
+                case 'getSweetPotatoShop':
+                    result = await require('../services/sweet-potato').getSweetPotatoShop(args[0]);
+                    break;
+                case 'sellSweetPotato':
+                    result = await require('../services/sweet-potato').sellSweetPotato({ gid: args[0], count: args[1] });
+                    break;
+                case 'getSweetPotatoExchangeShop':
+                    result = await require('../services/sweet-potato').getSweetPotatoExchangeShop();
+                    break;
+                case 'exchangeSweetPotatoGoods':
+                    result = await require('../services/sweet-potato').exchangeSweetPotatoGoods({ goodsId: args[0], count: args[1] });
+                    break;
+                case 'triggerSweetPotatoShareCrit':
+                    result = await require('../services/sweet-potato').triggerShareCrit();
+                    break;
+                case 'runSweetPotatoAutomation':
+                    result = await require('../services/sweet-potato').runSweetPotatoAutomation({ manual: true });
+                    break;
+                case 'claimSweetPotatoSeeds':
+                    result = await require('../services/sweet-potato').claimSweetPotatoSeeds();
+                    break;
+                case 'getSweetPotatoFriendRanking':
+                    result = await require('../services/sweet-potato').getFriendShopRanking(args[0] || {});
+                    break;
+                case 'getSweetPotatoRecords':
+                    result = await require('../services/sweet-potato').getSweetPotatoRecords();
+                    break;
+                case 'claimSweetPotatoCommission':
+                    result = await require('../services/sweet-potato').claimSweetPotatoCommission();
+                    break;
+                case 'saveSweetPotatoSettings':
+                    result = require('../services/sweet-potato').saveSweetPotatoSettings(args[0]);
                     break;
                 case 'getCurrentCharityRedFlowerActivity':
                     result = await require('../services/activity-center').getCurrentCharityRedFlowerActivity();

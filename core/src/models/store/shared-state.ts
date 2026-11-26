@@ -49,6 +49,17 @@ const DEFAULT_LOGIN_SETTINGS: LoginSettings = {
 const DEFAULT_ACCOUNT_CONFIG: AccountConfig = {
     automation: {
         ...RANCH_AUTOMATION_DEFAULTS,
+        // 以薯换福（2026-11-26）。必须放进默认模板：setAutomation 会丢弃
+        // 不在 DEFAULT_ACCOUNT_CONFIG.automation 里的键，否则设置永远存不进去。
+        sweetPotatoAutoSell: false,
+        sweetPotatoPriceTier: 'super',
+        sweetPotatoKeepCount: 0,
+        sweetPotatoCheckIntervalMinutes: 10,
+        sweetPotatoAutoExchange: false,
+        sweetPotatoSellToBestFriend: false,
+        sweetPotatoSellAfterTime: '',
+        sweetPotatoScanFriendLimit: 20,
+        sweetPotatoScanIntervalMinutes: 120,
         farm: true,
         farm_harvest_tiangong: true,
         farm_push: true,

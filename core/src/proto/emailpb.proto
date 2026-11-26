@@ -6,6 +6,9 @@ import "corepb.proto";
 
 message GetEmailListRequest {
     int32 box_type = 1;
+    // 1.17.1.10 抓包值恒为 1（2026-11-25），疑似分页或“是否带详情”开关。
+    // 服务端在缺省该字段时同样正常回包，暂不影响邮箱领取流程。
+    int32 field_2 = 2;
 }
 
 message EmailItem {

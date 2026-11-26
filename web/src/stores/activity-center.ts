@@ -2,8 +2,8 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import api from '@/api'
 
-export type ActivityTabKey = 'travel' | 'constellation' | 'shop' | 'solar' | 'qixi' | 'qingmei' | 'charity' | 'weather' | 'pet' | 'wish' | 'happy' | 'milk' | 'muge'
-export type ActivityGameplayKey = 'stellar' | 'qixi' | 'qingmei' | 'charity' | 'weather' | 'pet' | 'wish' | 'happy' | 'milk' | 'muge'
+export type ActivityTabKey = 'travel' | 'constellation' | 'shop' | 'solar' | 'qixi' | 'qingmei' | 'charity' | 'weather' | 'pet' | 'wish' | 'happy' | 'milk' | 'muge' | 'sweet'
+export type ActivityGameplayKey = 'stellar' | 'qixi' | 'qingmei' | 'charity' | 'weather' | 'pet' | 'wish' | 'happy' | 'milk' | 'muge' | 'sweet'
 export type ActivityVariant = 'blue' | 'violet' | 'gold' | 'green'
 export type ActivityRecord = Record<string, unknown>
 
@@ -901,7 +901,7 @@ export function normalizeActivityDirectory(value: unknown): ActivityDirectoryIte
     const gameplayKey = text(entry.gameplayKey, entry.gameplay_key)
     const rawGameplayTargets = first(entry.gameplayTargets, entry.gameplay_targets)
     const gameplayTargets = Array.isArray(rawGameplayTargets)
-      ? rawGameplayTargets.map(value => text(value)).filter((value): value is ActivityTabKey => ['travel', 'constellation', 'shop', 'solar', 'qixi', 'qingmei', 'charity', 'weather', 'pet', 'wish', 'happy', 'milk', 'muge'].includes(value))
+      ? rawGameplayTargets.map(value => text(value)).filter((value): value is ActivityTabKey => ['travel', 'constellation', 'shop', 'solar', 'qixi', 'qingmei', 'charity', 'weather', 'pet', 'wish', 'happy', 'milk', 'muge', 'sweet'].includes(value))
       : []
     const id = text(entry.id, entry.activityId, entry.activity_id)
     const rawActivityIds = first(entry.activityIds, entry.activity_ids)

@@ -37,11 +37,12 @@ test('decoded WeChat login uses configured device fields and does not invent a l
     const saved = { platform: CONFIG.platform, clientVersion: CONFIG.clientVersion, deviceInfo: CONFIG.deviceInfo };
     try {
         CONFIG.platform = 'wx';
+        // 微信分支用 wxClientVersion（回落到 DEFAULT_WX_CLIENT_VERSION），与 CONFIG.clientVersion 无关。
         CONFIG.clientVersion = DEFAULT_CLIENT_VERSION;
         CONFIG.deviceInfo = { sysSoftware: 'Windows test', network: 'wifi', memory: '8192', deviceId: 'test-device' };
         const decode = () => types.PlayerLoginRequest.toObject(types.PlayerLoginRequest.decode(buildLoginBody()), { longs: String });
         const wx = decode();
-        assert.deepEqual(wx.device_info, { client_version: DEFAULT_CLIENT_VERSION, sys_software: 'Windows test', network: 'wifi', memory: '8192', device_id: 'test-device' });
+        assert.deepEqual(wx.device_info, { client_version: DEFAULT_WX_CLIENT_VERSION, sys_software: 'Windows test', network: 'wifi', memory: '8192', device_id: 'test-device' });
         assert.equal(wx.share_key, '');
         assert.equal(wx.game_scene_id, 1);
         assert.deepEqual(Object.keys(wx.report_data).sort(), ['minigame_channel', 'minigame_platid']);

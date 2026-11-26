@@ -145,7 +145,14 @@ message BasicInfo {
     map<int64, ShareInfo> share_infos = 12;
     int32 authorized_status = 13;
     bool disable_nudge = 14;
+    // 1.17.1.10 抓包新增（2026-11-25），语义未解码：
+    //   field_16 为嵌套消息（样例 08d10f，即 field_1=2001）
+    //   field_20=48、field_21=1762046、field_22=240（同账号本次取值）
+    bytes field_16 = 16;
     BasicExtraInfo extra_info = 18;
+    int64 field_20 = 20;
+    int64 field_21 = 21;
+    int64 field_22 = 22;
 }
 
 message ShareInfo {
@@ -248,6 +255,9 @@ message UserSettings {
     int64 qq_friend_recommend_authorized = 1;
     bool disable_nudge = 2;
     bool field_3 = 3;
+    // 1.17.1.10 抓包值恒为 1（2026-11-25）。与 field_3 同为开关型，
+    // 具体含义未解码，不参与业务判断。
+    bool field_5 = 5;
 }
 
 message GetUserSettingsReply {

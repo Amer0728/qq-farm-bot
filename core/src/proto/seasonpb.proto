@@ -52,7 +52,11 @@ message SeasonInfo {
     SeasonPass pass = 10;
 }
 
-message GetSeasonInfoRequest {}
+message GetSeasonInfoRequest {
+    // 1.17.1.10 抓包值恒为 1（2026-11-25），与 ActivityListRequest.game_scene_id
+    // 同形同值，按场景号处理；缺省时服务端仍正常回包。
+    int32 field_1 = 1;
+}
 
 message GetSeasonInfoReply {
     SeasonInfo season_info = 1;

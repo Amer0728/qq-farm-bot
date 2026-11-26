@@ -41,6 +41,14 @@ message LandInfo {
         int64 plant_yield_bonus = 1;
         int64 planting_time_reduction = 2;
         int64 plant_exp_bonus = 3;
+        // 1.17.1.10 抓包新增（2026-11-25）。同一账号不同土地取值：
+        //   6 级地 field_4=12500 field_5=5000 field_6=3000
+        //   5 级地 field_4=12000 field_5=4000 field_6=2500
+        // 量级与 1~3 不同（同块地 1~3 为 40000/2000/3000），语义尚未解码，
+        // 暂不参与产量与经验计算，只保证解码不丢字段。
+        int64 field_4 = 4;
+        int64 field_5 = 5;
+        int64 field_6 = 6;
     }
 }
 
@@ -224,13 +232,20 @@ message HarvestRequest {
     repeated int64 land_ids = 1;    // 要收获的土地ID列表
     int64 host_gid = 2;            // 农场主GID
     bool is_all = 3;               // 是否全部收获
+    // 1.17.1.10 抓包新增（2026-11-25），样本值均为 0，语义未定。
+    int64 field_4 = 4;
+    int64 field_5 = 5;
 }
 
 message HarvestReply {
     repeated LandInfo land = 1;
-    // repeated Item items = 2;     // corepb.Item
+    // 1.17.1.10 抓包中为长度分隔字段，内部结构尚未解码（疑似收获得到的道具），
+    // 按原始字节保留。
+    bytes field_2 = 2;
     // repeated Item lost_items = 3;
     repeated OperationLimit operation_limits = 4;
+    // 1.17.1.10 抓包新增，长度分隔，结构未解码。
+    bytes field_7 = 7;
 }
 
 // --- 浇水 ---

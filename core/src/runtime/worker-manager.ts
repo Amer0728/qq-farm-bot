@@ -17,6 +17,21 @@ const API_CALL_TIMEOUTS_MS: Record<string, number> = {
     scanWeatherFriends: 60000,
     getWeatherFriends: 30000,
     clearRanchIllustratedNew: 40000,
+    // 以薯换福：活动 RPC 串行 + 250ms 间隔，且要排在自动任务互斥锁后面，
+    // 默认 10s 会把读请求误判成超时（实测 3 条串联就要 10s 以上）。
+    getSweetPotatoState: 45000,
+    getSweetPotatoShop: 30000,
+    getSweetPotatoExchangeShop: 45000,
+    getSweetPotatoRecords: 45000,
+    // 好友比价要逐个读好友铺子行情（串行 250ms 间隔），最多 60 位。
+    getSweetPotatoFriendRanking: 150000,
+    sellSweetPotato: 60000,
+    exchangeSweetPotatoGoods: 60000,
+    claimSweetPotatoSeeds: 45000,
+    claimSweetPotatoCommission: 45000,
+    triggerSweetPotatoShareCrit: 120000,
+    runSweetPotatoAutomation: 180000,
+    saveSweetPotatoSettings: 15000,
 };
 
 interface WorkerManagerOptions {

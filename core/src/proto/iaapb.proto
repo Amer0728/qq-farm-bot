@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package iaapb;
+
+// IaaService.GetAdUnits —— 1.17.1.10 抓包新增（2026-11-25）。
+// IAA（激励广告）广告位配置查询。脚本当前不依赖该服务，这里只补齐协议面，
+// 避免解码时把新服务的报文当成未知消息。
+// 抓包样例：请求 2 字节 {field_1=0}；回包 43 字节，单个 AdUnit。
+
+message GetAdUnitsRequest {
+    // 抓包值 0，疑似广告场景或版本标记。
+    int32 field_1 = 1;
+}
+
+message AdUnit {
+    int64 id = 1;              // 例：10001
+    string ad_unit_id = 3;     // 例：adunit-1e518c6aa22122d3
+    string app_id = 4;         // 例：qqfarm_test
+}
+
+message GetAdUnitsReply {
+    repeated AdUnit units = 1;
+}

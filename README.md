@@ -387,6 +387,7 @@ pnpm -C core exec tsx ../tools/audit-capture-compatibility.js <capture-dir>
 - [TSDK Node.js 运行约定](docs/tsdk-runtime.md)
 - [配置存储、迁移与缓存](docs/config-storage.md)
 - [2026-10-22 游戏版本与资源对齐](docs/game-update-20261022.md)
+- [2026-11-25 游戏版本对齐：1.17.1.10](docs/game-update-20261125.md)
 - [雨落成诗活动协议与实现](docs/weather-activity.md)
 - [神秘商人、游戏商城与购买协议](docs/shop-protocols.md)
 - [好友宠物缓存与每日同步](docs/friend-pet-cache.md)

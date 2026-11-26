@@ -16,7 +16,29 @@ export type FertilizerMode = 'both' | 'normal' | 'organic' | 'smart' | 'none' | 
 
 export type FertilizerLandType = 'blue-crystal' | 'purple-gold' | 'gold' | 'black' | 'red' | 'normal';
 
+/** 以薯换福出售档位：仅超高价 / 高价及以上 / 任意档位。 */
+export type SweetPotatoPriceTier = 'super' | 'high' | 'any';
+
 export interface AutomationConfig extends RanchAutomationConfig {
+  // ===== 以薯换福（2026-11-25 抓包还原）=====
+  /** 自动出售开关，默认关闭。 */
+  sweetPotatoAutoSell?: boolean;
+  /** 出售档位阈值，默认仅超高价。 */
+  sweetPotatoPriceTier?: SweetPotatoPriceTier;
+  /** 保留数量（留给兑换），默认 0。 */
+  sweetPotatoKeepCount?: number;
+  /** 检查间隔（分钟），默认 10。 */
+  sweetPotatoCheckIntervalMinutes?: number;
+  /** 自动兑换开关（兑换协议待补），默认关闭。 */
+  sweetPotatoAutoExchange?: boolean;
+  /** 出售给最高价好友（对比好友铺子价，高于自己铺子才卖），默认关闭。 */
+  sweetPotatoSellToBestFriend?: boolean;
+  /** 出售时间闸门 HH:MM，空串表示不限时段。 */
+  sweetPotatoSellAfterTime?: string;
+  /** 比价好友数量上限，默认 20。 */
+  sweetPotatoScanFriendLimit?: number;
+  /** 好友比价缓存时长（分钟），默认 120。 */
+  sweetPotatoScanIntervalMinutes?: number;
   farm: boolean;
   farm_harvest_tiangong: boolean;
   farm_push: boolean;

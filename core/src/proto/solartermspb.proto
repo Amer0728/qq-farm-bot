@@ -31,6 +31,13 @@ message GetSolarTermsRedDotRequest {}
 
 message GetSolarTermsRedDotReply {}
 
+// SolarTermsV2Service.GetSolarTermsV2RedDot —— 1.17.1.10 抓包新增（2026-11-25）。
+// 服务名变为 V2，旧的 SolarTermsService.GetSolarTermsRedDot 仍在并行调用；
+// 本次会话中请求与回包均为 0 字节空消息，字段结构待有内容时再补。
+message GetSolarTermsV2RedDotRequest {}
+
+message GetSolarTermsV2RedDotReply {}
+
 message GetSolarTermsReply {
     repeated SolarTermInfo terms = 1;
     int64 server_time = 2;

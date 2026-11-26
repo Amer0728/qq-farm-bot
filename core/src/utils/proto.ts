@@ -60,6 +60,8 @@ async function loadProto(): Promise<void> {
         getResourcePath('proto', 'mutantpb.proto'),
         getResourcePath('proto', 'miscpb.proto'),
         getResourcePath('proto', 'achievepb.proto'),
+        getResourcePath('proto', 'msgboardpb.proto'),
+        getResourcePath('proto', 'iaapb.proto'),
     ], { keepCase: true });
 
     // 网关
@@ -75,6 +77,9 @@ async function loadProto(): Promise<void> {
     types.MilkTeaOperateReply = root.lookupType('gamepb.activitypb.MilkTeaOperateReply');
     types.MilkTeaGetGroupReply = root.lookupType('gamepb.activitypb.MilkTeaGetGroupReply');
     types.MilkTeaOperateRequest = root.lookupType('gamepb.activitypb.MilkTeaOperateRequest');
+    // 以薯换福（2026-11-25/26 抓包还原）：Operate 请求/回包与铺子信息。
+    types.YshfOperateRequest = root.lookupType('gamepb.activitypb.YshfOperateRequest');
+    types.YshfOperateReply = root.lookupType('gamepb.activitypb.YshfOperateReply');
     types.PlayerLoginRequest = root.lookupType('gamepb.userpb.PlayerLoginRequest');
     types.PlayerLoginReply = root.lookupType('gamepb.userpb.PlayerLoginReply');
     types.PlayerSceneLoginRequest = root.lookupType('gamepb.globalscenepb.PlayerSceneLoginRequest');
