@@ -361,7 +361,8 @@ async function fetchShopQuote(gid: string, token = ''): Promise<any> {
 async function getSweetPotatoShop(gidInput?: unknown, tokenInput?: unknown): Promise<any> {
   const gid = toId(gidInput) || ownGid();
   if (!/^\d+$/.test(gid)) throw businessError('INVALID_SWEET_POTATO_GID', '玩家 GID 必须是正十进制整数');
-  const token = extractShopToken(tokenInput);
+  // 显式传入优先，其次用仓库里已采集的票据。
+  const token = extractShopToken(tokenInput) || getShopTicket(gid);
   if (gid !== ownGid() && !token) {
     throw businessError('SWEET_POTATO_TICKET_REQUIRED', '查看好友铺子需要对方分享卡片里的票据');
   }
@@ -744,7 +745,16 @@ async function getFriendShopRanking(options: { force?: boolean; limit?: number }
     }
     const ownGidValue = ownGid();
     const seen = new Set<string>();
-    const candidates = (Array.isArray(friends) ? friends : [])
+    // 候选 = 好友列表 ∪ 票据仓库里的 gid。
+    // 票据可能来自好友分享卡片，也可能是用户从群/私聊点开的非好友铺子，
+    // 只要采到票就应当参与比价。
+    const storeGids = Object.keys(loadTicketStore()).filter((gid: string) => /^\d+$/.test(gid) && gid !== ownGidValue);
+    const friendRows = Array.isArray(friends) ? friends : [];
+    const friendGidSet = new Set(friendRows.map((one: any) => toId(one?.gid ?? one?.uin)));
+    const extraRows = storeGids
+      .filter((gid: string) => !friendGidSet.has(gid))
+      .map((gid: string) => ({ gid, name: '', level: 0, avatar_url: '' }));
+    const candidates = [...friendRows, ...extraRows]
       .map((friend: any) => ({
         gid: toId(friend?.gid ?? friend?.uin),
         name: String(friend?.name || friend?.nickname || ''),
