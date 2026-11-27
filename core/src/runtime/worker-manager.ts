@@ -25,6 +25,8 @@ const API_CALL_TIMEOUTS_MS: Record<string, number> = {
     getSweetPotatoRecords: 45000,
     // 好友比价要逐个读好友铺子行情（串行 250ms 间隔），最多 60 位。
     getSweetPotatoFriendRanking: 150000,
+    // 探价会真的卖 1 个蜜薯，给足超时
+    probeSweetPotatoPrice: 60000,
     sellSweetPotato: 60000,
     exchangeSweetPotatoGoods: 60000,
     claimSweetPotatoSeeds: 45000,

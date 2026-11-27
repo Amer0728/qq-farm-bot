@@ -60,6 +60,10 @@ export function mountSweetPotatoRoutes({ app, ctx, withAccount, mountGet }: Acti
     mountGet('/api/activity-center/sweet-potato/records', 'getSweetPotatoRecords');
     // 票据仓库：查他人铺子必须带票据（官方 1.17.1.13 起），这里负责导入与查看。
     mountGet('/api/activity-center/sweet-potato/tickets', 'getSweetPotatoTickets');
+    // 探价：卖 1 个蜜薯换真实单价（无需票据，但会消耗库存与对方额度）
+    mountGet('/api/activity-center/sweet-potato/prices', 'getSweetPotatoPrices');
+    app.post('/api/activity-center/sweet-potato/probe', withAccount((accountId, req: Request) =>
+        ctx.provider.probeSweetPotatoPrice(accountId, req.body?.gid, { force: req.body?.force === true })));
     app.post('/api/activity-center/sweet-potato/tickets', withAccount((accountId, req: Request) =>
         ctx.provider.saveSweetPotatoTicket(accountId, req.body?.gid, req.body?.token)));
     // 从 QQ 渲染进程内存里只读采集票据（需游戏端打开过好友铺子）

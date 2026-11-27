@@ -97,6 +97,8 @@ const autoStat = ref<any>(null)
 let autoTimer: any = null
 const friendGid = ref('')
 const friendToken = ref('')
+const probeGid = ref('')
+const probeLoading = ref(false)
 const friendShop = ref<ShopInfo | null>(null)
 const friendError = ref('')
 const friendLoading = ref(false)
@@ -272,6 +274,34 @@ async function harvestTickets() {
   }
   finally {
     harvesting.value = false
+  }
+}
+
+/** 探价：卖 1 个蜜薯给目标铺子，读回真实单价（无需票据，但消耗库存与对方额度）。 */
+async function probePrice(force = false) {
+  const gid = probeGid.value.trim()
+  if (!/^\d+$/.test(gid)) {
+    toast.error('请输入正确的玩家 GID')
+    return
+  }
+  probeLoading.value = true
+  try {
+    const response = await api.post('/api/activity-center/sweet-potato/probe', { gid, force }, { skipErrorToast: true } as any)
+    if (!response.data?.ok) {
+      toast.error(getApiErrorMessage(response.data, '探价失败'))
+      return
+    }
+    const data = response.data.data
+    notice.value = data.cached
+      ? `该铺子今天已探过价：${data.price}/个（未消耗蜜薯）`
+      : `探价成功：${data.price}/个（消耗 ${data.spent} 个蜜薯，收入 ${data.gain} 福气币）`
+    await Promise.all([load(), loadFriends(false)])
+  }
+  catch (cause: any) {
+    toast.error(getApiErrorMessage(cause, '探价失败'))
+  }
+  finally {
+    probeLoading.value = false
   }
 }
 
@@ -706,7 +736,7 @@ onMounted(async () => {
               <span class="sweet-item__well"><span class="i-carbon-user-avatar" aria-hidden="true" /></span>
               <div class="sweet-item__main">
                 <strong>{{ friend.name || friend.gid }}</strong>
-                <span>Lv{{ friend.level || '-' }} · 额度 {{ friend.quota }}</span>
+                <span>Lv{{ friend.level || '-' }} · 额度 {{ friend.quota }} · {{ friend.priceSource === 'probe' ? '探价' : '票据' }}</span>
               </div>
               <span class="sweet-friend__price">
                 {{ friend.price }}<small>/个</small>
@@ -720,6 +750,9 @@ onMounted(async () => {
             <NInput v-model:value="friendGid" placeholder="好友 GID" size="small" class="sweet-gid" />
             <NInput v-model:value="friendToken" placeholder="粘贴好友分享卡片里的票据（UUID）" size="small" class="sweet-token" />
             <NButton size="small" :loading="friendLoading" @click="loadFriend">查询</NButton>
+            <span class="sweet-panel__hint">|</span>
+            <NInput v-model:value="probeGid" placeholder="探价 GID" size="small" class="sweet-gid" />
+            <NButton size="small" :loading="probeLoading" @click="probePrice(false)">探价（卖 1 个）</NButton>
             <span v-if="friendShop" class="sweet-panel__meta">
               {{ friendShop.name || friendShop.gid }} · {{ friendShop.price }}/个 · 额度 {{ friendShop.quota }}
               · {{ friendShop.price > price ? `比我高 ${friendShop.price - price}` : friendShop.price < price ? `比我低 ${price - friendShop.price}` : '与我一致' }}

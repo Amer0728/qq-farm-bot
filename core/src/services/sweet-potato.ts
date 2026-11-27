@@ -325,16 +325,90 @@ function listShopTickets(): any[] {
   }));
 }
 
+/**
+ * 探价用的价格缓存：core/data/sweet-shop-prices.json
+ * { [gid]: { price, quota, day, at } }，按服务端日（UTC+8）失效。
+ *
+ * 背景：1.17.1.13 起查他人铺子必须带票据（只随好友卡片下发），拿不到票就看不到价。
+ * 但出售接口（93）不看票据，回包直接带真实成交单价——
+ * 所以「卖 1 个蜜薯」就是一次合法的价格探测，代价是 1 个蜜薯 + 对方 1 点接收额度。
+ * 只允许手动触发，自动流程绝不主动消耗库存。
+ */
+const PRICE_FILE_NAME = 'sweet-shop-prices.json';
+let priceCacheStore: Record<string, any> | null = null;
+
+function serverDayKey(nowMs = Date.now()): string {
+  return new Date(nowMs + 8 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+function priceFilePath(): string {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const { getRuntimePaths } = require('../config/runtime-paths');
+  const dir = getRuntimePaths().dataDir;
+  fs.mkdirSync(dir, { recursive: true });
+  return path.join(dir, PRICE_FILE_NAME);
+}
+
+function loadPriceStore(): Record<string, any> {
+  if (priceCacheStore) return priceCacheStore;
+  try {
+    const fs = require('node:fs');
+    const file = priceFilePath();
+    const raw = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
+    priceCacheStore = raw && typeof raw === 'object' ? raw : {};
+  } catch {
+    priceCacheStore = {};
+  }
+  return priceCacheStore as Record<string, any>;
+}
+
+function persistPriceStore(): void {
+  const fs = require('node:fs');
+  const file = priceFilePath();
+  const tmp = `${file}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(priceCacheStore || {}, null, 2));
+  fs.renameSync(tmp, file);
+}
+
+function saveShopPrice(gidInput: unknown, price: number, quota: number): void {
+  const gid = toId(gidInput);
+  if (!/^\d+$/.test(gid) || !(price > 0)) return;
+  const store = loadPriceStore();
+  store[gid] = { price: Math.round(price), quota: toNum(quota), day: serverDayKey(), at: Date.now() };
+  persistPriceStore();
+}
+
+/** 取当天有效的探价结果。 */
+function getShopPrice(gidInput: unknown): any | null {
+  const gid = toId(gidInput);
+  const row = loadPriceStore()[gid];
+  if (!row || row.day !== serverDayKey()) return null;
+  return { gid, price: toNum(row.price), quota: toNum(row.quota), at: toNum(row.at), source: 'probe' };
+}
+
+function listShopPrices(): any[] {
+  const day = serverDayKey();
+  return Object.entries(loadPriceStore())
+    .filter(([, row]: [string, any]) => row?.day === day)
+    .map(([gid, row]: [string, any]) => ({ gid, price: toNum(row?.price), quota: toNum(row?.quota), at: toNum(row?.at) }));
+}
+
 /** 生成 92 查询票据：活动 id + 目标铺子 gid + 一次性 UUID。 */
 function buildShopTicket(gid: string, token: string): any {
   return { activity_id: ACTIVITY_ID, shop_gid: gid, nonce: token };
 }
 
-/** 从分享链接/纯文本里抽出 8-4-4-4-12 形态的票据。 */
+/**
+ * 从分享链接/纯文本里抽票据。
+ * 服务端签发的凭证有两种形态：
+ *   - UUID：8-4-4-4-12（好友卡片里的）
+ *   - 32 位十六进制（cmd 98 分享回包里的 shop.share_key）
+ */
 function extractShopToken(input: unknown): string {
   const raw = String(input ?? '').trim();
   if (!raw) return '';
-  const match = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.exec(raw);
+  const match = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32}/i.exec(raw);
   return match ? match[0].toLowerCase() : '';
 }
 
@@ -371,6 +445,32 @@ async function getSweetPotatoShop(gidInput?: unknown, tokenInput?: unknown): Pro
   // 查询成功说明票据有效，落库供后续比价复用。
   if (token && gid !== ownGid()) saveShopTicket(gid, token, 'manual');
   return { ...shop, isSelf: gid === ownGid() };
+}
+
+/**
+ * 探价：卖 1 个蜜薯给目标铺子，从 93 回包读真实成交单价并缓存。
+ * 会消耗 1 个蜜薯，并占用对方 1 点接收额度——只在手动触发时执行。
+ */
+async function probeFriendShopPrice(gidInput: unknown, options: { force?: boolean } = {}): Promise<any> {
+  const gid = toId(gidInput);
+  if (!/^\d+$/.test(gid)) throw businessError('INVALID_SWEET_POTATO_GID', '玩家 GID 必须是正十进制整数');
+  if (gid === ownGid()) throw businessError('SWEET_POTATO_PROBE_SELF', '探价只用于好友铺子，自己铺子直接查行情即可');
+  const cached = getShopPrice(gid);
+  if (cached && !options.force) return { ...cached, spent: 0, cached: true };
+  const bag = await getBagCached(true);
+  const owned = bagItemCount(bag, ITEM_SWEET_POTATO);
+  if (owned < 1) throw businessError('SWEET_POTATO_NO_INVENTORY', '背包里没有蜜薯，无法探价');
+  const result = await sellSweetPotato({ gid, count: 1 });
+  saveShopPrice(gid, result.unitPrice, result.quota);
+  return {
+    gid,
+    price: result.unitPrice,
+    spent: result.count,
+    gain: result.totalGain,
+    quota: result.quota,
+    balance: result.balance,
+    cached: false,
+  };
 }
 
 /** 活动状态（GetGroup → 主活动 130 槽）。 */
@@ -768,11 +868,28 @@ async function getFriendShopRanking(options: { force?: boolean; limit?: number }
         seen.add(friend.gid);
         return true;
       })
-      .filter((friend: any) => Boolean(getShopTicket(friend.gid)))
+      .filter((friend: any) => Boolean(getShopTicket(friend.gid)) || Boolean(getShopPrice(friend.gid)))
       .slice(0, maxFriends);
 
     const rows: any[] = [];
     for (const candidate of candidates) {
+      const probed = getShopPrice(candidate.gid);
+      if (probed && !getShopTicket(candidate.gid)) {
+        // 没票但有当天探价结果：直接用它，不再发请求（省额度也省时间）
+        rows.push({
+          gid: candidate.gid,
+          name: candidate.name,
+          level: candidate.level,
+          avatarUrl: candidate.avatarUrl,
+          basePrice: 0,
+          bonusPrice: 0,
+          price: probed.price,
+          quota: probed.quota,
+          canSell: undefined,
+          priceSource: 'probe',
+        });
+        continue;
+      }
       try {
         const shop = await fetchShopQuote(candidate.gid);
         rows.push({
@@ -785,6 +902,7 @@ async function getFriendShopRanking(options: { force?: boolean; limit?: number }
           price: shop.price,
           quota: shop.quota,
           canSell: shop.canSell,
+          priceSource: 'ticket',
         });
       }
       catch (error: any) {
@@ -1075,5 +1193,8 @@ module.exports = {
   getShopTicket,
   dropShopTicket,
   listShopTickets,
+  probeFriendShopPrice,
+  getShopPrice,
+  listShopPrices,
   runSweetPotatoAutomation,
 };

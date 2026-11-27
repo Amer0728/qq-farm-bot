@@ -9,6 +9,8 @@ const ACTIVITY_ERROR_MESSAGES: Record<string, string> = {
     '1034038': '当前没有可点亮或可领取的星宿奖励，可能已经领取过，请稍后或明天再来看看',
     '1034184': '官方已限制查看好友铺子行情，需要对方分享卡片里的票据',
     SWEET_POTATO_TICKET_REQUIRED: '查看好友铺子需要对方分享卡片里的票据',
+    SWEET_POTATO_PROBE_SELF: '探价只用于好友铺子',
+    SWEET_POTATO_NO_INVENTORY: '背包里没有蜜薯，无法探价',
     '1034178': '蜜薯数量不足或活动状态异常',
     '1034001': '当前活动暂不可操作，请稍后再试',
     '1034002': '活动尚未开放或已经结束',
