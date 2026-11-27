@@ -108,6 +108,28 @@ const DEFAULT_SETTINGS: SweetPotatoSettings = {
   scanIntervalMinutes: 120,
 };
 
+/**
+ * 2026-11-28 客户端 1.17.1.13 起，服务端开始拒绝查询**他人**铺子行情：
+ * Operate 92 传好友 gid 一律返回 1034184（活动操作失败）。
+ * 自己铺子（92 传本人 gid）、出售 93、兑换 96/97、收购记录 95、领提成 99 均正常。
+ * 因此好友比价改为"受限模式"：识别到该错误码就短缓存一段时间，不再逐家试探。
+ */
+const FRIEND_QUERY_BLOCKED_CODE = 1034184;
+const FRIEND_BLOCKED_TTL_MS = 10 * 60 * 1000;
+let friendQueryBlockedUntil = 0;
+
+function isFriendQueryBlocked(error: any): boolean {
+  return Number(error?.code) === FRIEND_QUERY_BLOCKED_CODE;
+}
+
+function friendQueryRestricted(): boolean {
+  return Date.now() < friendQueryBlockedUntil;
+}
+
+function markFriendQueryBlocked(): void {
+  friendQueryBlockedUntil = Date.now() + FRIEND_BLOCKED_TTL_MS;
+}
+
 function businessError(code: string, message: string): Error {
   const error = new Error(message) as Error & { code?: string };
   error.code = code;
@@ -487,6 +509,8 @@ let friendRankAt = 0;
 let friendRankCache: any[] = [];
 
 async function findBestFriendShop(sellable: number, options: { force?: boolean } = {}): Promise<any | null> {
+  // 官方限制期内不再扫好友，自动出售退回"只卖自己铺子"。
+  if (friendQueryRestricted()) return null;
   const settings = readSweetPotatoSettings();
   const ttl = Math.max(5, settings.scanIntervalMinutes) * 60000;
   if (!options.force && Date.now() - friendRankAt < ttl && friendRankCache.length) {
@@ -514,8 +538,12 @@ async function findBestFriendShop(sellable: number, options: { force?: boolean }
       if (shop.canSell === false) continue;
       ranking.push(shop);
     }
-    catch {
-      // 单个好友读取失败跳过
+    catch (error: any) {
+      if (isFriendQueryBlocked(error)) {
+        markFriendQueryBlocked();
+        break;
+      }
+      // 其他错误（网络抖动等）跳过，不影响整轮
     }
   }
   ranking.sort((a: any, b: any) => b.price - a.price);
@@ -580,6 +608,22 @@ async function getFriendShopRanking(options: { force?: boolean; limit?: number }
   const ttl = Math.max(5, settings.scanIntervalMinutes) * 60000;
   const cached = !options.force && friendRankCache.length > 0 && Date.now() - friendRankAt < ttl;
 
+  // 限制期内直接返回受限态，不打任何好友请求。
+  if (friendQueryRestricted() && !options.force) {
+    return {
+      own: { gid: own.gid, name: own.name, price: toNum(own.price), basePrice: own.basePrice, bonusPrice: own.bonusPrice, quota: own.quota },
+      friends: [],
+      fetchedAt: friendRankAt,
+      cached: true,
+      restricted: true,
+      restrictedCode: FRIEND_QUERY_BLOCKED_CODE,
+      scanned: 0,
+      scanLimit: maxFriends,
+      scanIntervalMinutes: settings.scanIntervalMinutes,
+    };
+  }
+
+  let blocked = 0;
   if (!cached) {
     const { getFriendsList } = require('./friend/visit-strategy');
     let friends: any[] = [];
@@ -623,7 +667,12 @@ async function getFriendShopRanking(options: { force?: boolean; limit?: number }
           canSell: shop.canSell,
         });
       }
-      catch {
+      catch (error: any) {
+        if (isFriendQueryBlocked(error)) {
+          blocked += 1;
+          markFriendQueryBlocked();
+          break;
+        }
         // 单个好友读不到行情就跳过，不影响整轮排行
       }
     }
@@ -649,6 +698,8 @@ async function getFriendShopRanking(options: { force?: boolean; limit?: number }
     })),
     fetchedAt: friendRankAt,
     cached,
+    restricted: blocked > 0 && friendRankCache.length === 0,
+    restrictedCode: blocked > 0 ? FRIEND_QUERY_BLOCKED_CODE : 0,
     scanned: friendRankCache.length,
     scanLimit: maxFriends,
     scanIntervalMinutes: settings.scanIntervalMinutes,

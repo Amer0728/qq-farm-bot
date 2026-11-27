@@ -89,6 +89,8 @@ const acting = ref('')
 const friends = ref<any[]>([])
 const friendMeta = ref('')
 const friendListLoading = ref(false)
+const friendRestricted = ref(false)
+const restrictedCode = ref(0)
 const friendGid = ref('')
 const friendShop = ref<ShopInfo | null>(null)
 const friendError = ref('')
@@ -191,9 +193,13 @@ async function loadFriends(force = false) {
       return
     }
     const data = response.data.data
+    friendRestricted.value = data?.restricted === true
+    restrictedCode.value = Number(data?.restrictedCode || 0)
     friends.value = Array.isArray(data?.friends) ? data.friends : []
     const stamp = data?.fetchedAt ? new Date(data.fetchedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : ''
-    friendMeta.value = `${data?.scanned ?? 0} 位好友 · ${data?.cached ? '缓存' : '刚刚同步'}${stamp ? ` ${stamp}` : ''}`
+    friendMeta.value = data?.restricted
+      ? '官方已限制好友行情'
+      : `${data?.scanned ?? 0} 位好友 · ${data?.cached ? '缓存' : '刚刚同步'}${stamp ? ` ${stamp}` : ''}`
   }
   catch (cause: any) {
     friendError.value = getApiErrorMessage(cause, '无法读取好友铺子比价')
@@ -603,6 +609,10 @@ onMounted(refreshAll)
           </div>
 
           <p v-if="friendError" class="sweet-panel__warn">{{ friendError }}</p>
+          <p v-if="friendRestricted" class="sweet-panel__warn">
+            官方已限制查看好友铺子行情（错误码 {{ restrictedCode || 1034184 }}）。自己铺子、出售、兑换、收购记录都不受影响；
+            自动出售会退回只卖自己的铺子。
+          </p>
 
           <div v-if="bestFriend" class="sweet-friend">
             <span class="sweet-friend__name">最高价 {{ bestFriend.name || bestFriend.gid }}</span>
@@ -626,7 +636,7 @@ onMounted(refreshAll)
               </span>
             </article>
           </div>
-          <p v-else-if="!friendListLoading" class="sweet-panel__meta">好友列表里没有可读取的铺子，或活动尚未开始。</p>
+          <p v-else-if="!friendListLoading && !friendRestricted" class="sweet-panel__meta">好友列表里没有可读取的铺子，或活动尚未开始。</p>
 
           <div class="sweet-panel__row">
             <NInput v-model:value="friendGid" placeholder="或手动输入 GID 查询" size="small" class="sweet-gid" />
@@ -654,8 +664,8 @@ onMounted(refreshAll)
               <NSwitch v-model:value="settings.autoExchange" size="small" />
             </label>
             <label class="sweet-form__row">
-              <span>出售给最高价好友</span>
-              <NSwitch v-model:value="settings.sellToBestFriend" size="small" />
+              <span>出售给最高价好友{{ friendRestricted ? '（官方受限，暂不生效）' : '' }}</span>
+              <NSwitch v-model:value="settings.sellToBestFriend" size="small" :disabled="friendRestricted" />
             </label>
             <label class="sweet-form__row">
               <span>出售条件</span>

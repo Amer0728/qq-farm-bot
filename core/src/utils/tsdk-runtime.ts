@@ -10,8 +10,9 @@ const { CONFIG } = require('../config/config');
 const { ensureDataDir, getResourcePath } = require('../config/runtime-paths');
 const { log, logWarn } = require('./utils');
 
-const TSDK_VERSION = 'v3.9.0.1795598781';
-const TSDK_SHA256 = '7f8a787849456e6d26a95b1f9a9e76dc72f2ef916ed035a0f90e1084e966b393';
+// 2026-11-28 小程序包 1112386029_3_bc5ac224 更新，SDK 161,123 B。
+const TSDK_VERSION = 'v3.9.0.1795803021';
+const TSDK_SHA256 = '55dc21884da148879baeb60e06d7bf8b22d5dcb48fb27ef8157533f031230afd';
 const TSDK_BUILDS = Object.freeze({
     qq: { file: 'tsdk.wasm', version: TSDK_VERSION, sha256: TSDK_SHA256 },
     wx: { file: 'tsdk-wx.wasm', version: 'v3.9.0.1794837963', sha256: 'd14a4f5d59c8a27128019dbad25fe3cd3d5243dfc389eb9bcbb345efb1cebc9a' },
