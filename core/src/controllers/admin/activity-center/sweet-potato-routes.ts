@@ -11,6 +11,10 @@ export function mountSweetPotatoRoutes({ app, ctx, withAccount, mountGet }: Acti
     app.post('/api/activity-center/sweet-potato/run', withAccount(accountId =>
         ctx.provider.runSweetPotatoAutomation(accountId)));
     mountGet('/api/activity-center/sweet-potato/records', 'getSweetPotatoRecords');
+    // 票据仓库：查他人铺子必须带票据（官方 1.17.1.13 起），这里负责导入与查看。
+    mountGet('/api/activity-center/sweet-potato/tickets', 'getSweetPotatoTickets');
+    app.post('/api/activity-center/sweet-potato/tickets', withAccount((accountId, req: Request) =>
+        ctx.provider.saveSweetPotatoTicket(accountId, req.body?.gid, req.body?.token)));
     // 好友铺子比价：自动从 QQ 好友列表取 GID；?force=1 才重新扫（默认走缓存）。
     app.get('/api/activity-center/sweet-potato/friends', withAccount((accountId, req: Request) =>
         ctx.provider.getSweetPotatoFriendRanking(accountId, {

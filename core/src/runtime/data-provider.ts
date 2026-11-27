@@ -198,6 +198,8 @@ function createDataProvider(options: DataProviderOptions) {
         claimSweetPotatoSeeds: (accountRef: string) => callWorkerApi(resolveAccountRefId(accountRef), 'claimSweetPotatoSeeds'),
         getSweetPotatoRecords: (accountRef: string) => callWorkerApi(resolveAccountRefId(accountRef), 'getSweetPotatoRecords'),
         getSweetPotatoFriendRanking: (accountRef: string, query?: unknown) => callWorkerApi(resolveAccountRefId(accountRef), 'getSweetPotatoFriendRanking', query || {}),
+        getSweetPotatoTickets: (accountRef: string) => callWorkerApi(resolveAccountRefId(accountRef), 'getSweetPotatoTickets'),
+        saveSweetPotatoTicket: (accountRef: string, gid: unknown, token: unknown) => callWorkerApi(resolveAccountRefId(accountRef), 'saveSweetPotatoTicket', gid, token),
         claimSweetPotatoCommission: (accountRef: string) => callWorkerApi(resolveAccountRefId(accountRef), 'claimSweetPotatoCommission'),
         saveSweetPotatoSettings: (accountRef: string, patch: unknown) => callWorkerApi(resolveAccountRefId(accountRef), 'saveSweetPotatoSettings', patch),
         getCurrentCharityRedFlowerActivity: (accountRef: string) => callWorkerApi(resolveAccountRefId(accountRef), 'getCurrentCharityRedFlowerActivity'),

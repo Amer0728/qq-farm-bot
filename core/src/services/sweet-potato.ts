@@ -249,6 +249,82 @@ function normalizeShop(reply: any, fallbackGid = ''): any {
   };
 }
 
+/**
+ * 好友票据仓库：core/data/sweet-shop-tickets.json
+ * { [gid]: { ticket, source, updatedAt } }
+ *
+ * 服务端从 1.17.1.13 起要求查他人铺子必须带票据，票据只随好友分享卡片下发。
+ * 三条采集通道（QQ 卡片消息 / 进程内存只读扫描 / 本地存储解析）最终都写到这里，
+ * 查询时优先取库里的票据，没有就跳过该好友，不做无效请求。
+ */
+const TICKET_FILE_NAME = 'sweet-shop-tickets.json';
+let ticketCache: Record<string, any> | null = null;
+
+function ticketFilePath(): string {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const { getRuntimePaths } = require('../config/runtime-paths');
+  const dir = getRuntimePaths().dataDir;
+  fs.mkdirSync(dir, { recursive: true });
+  return path.join(dir, TICKET_FILE_NAME);
+}
+
+function loadTicketStore(): Record<string, any> {
+  if (ticketCache) return ticketCache;
+  try {
+    const fs = require('node:fs');
+    const file = ticketFilePath();
+    const raw = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
+    ticketCache = raw && typeof raw === 'object' ? raw : {};
+  } catch {
+    ticketCache = {};
+  }
+  return ticketCache as Record<string, any>;
+}
+
+function persistTicketStore(): void {
+  const fs = require('node:fs');
+  const file = ticketFilePath();
+  const tmp = `${file}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(ticketCache || {}, null, 2));
+  fs.renameSync(tmp, file);
+}
+
+/** 写入/更新一枚票据。source 记录来源：card | memory | storage | manual。 */
+function saveShopTicket(gidInput: unknown, tokenInput: unknown, source = 'manual'): boolean {
+  const gid = toId(gidInput);
+  const token = extractShopToken(tokenInput);
+  if (!/^\d+$/.test(gid) || !token) return false;
+  const store = loadTicketStore();
+  store[gid] = { ticket: token, source: String(source || 'manual').slice(0, 16), updatedAt: Date.now() };
+  persistTicketStore();
+  return true;
+}
+
+function getShopTicket(gidInput: unknown): string {
+  const gid = toId(gidInput);
+  if (!/^\d+$/.test(gid)) return '';
+  return extractShopToken(loadTicketStore()[gid]?.ticket);
+}
+
+/** 票据失效（服务端回 1034184）时丢弃，下次重新采集。 */
+function dropShopTicket(gidInput: unknown): void {
+  const gid = toId(gidInput);
+  const store = loadTicketStore();
+  if (store[gid]) { delete store[gid]; persistTicketStore(); }
+}
+
+/** 列出已采集的票据（票据本身打码，只给界面看状态）。 */
+function listShopTickets(): any[] {
+  const store = loadTicketStore();
+  return Object.entries(store).map(([gid, value]: [string, any]) => ({
+    gid,
+    source: String(value?.source || ''),
+    updatedAt: Number(value?.updatedAt) || 0,
+    masked: `${String(value?.ticket || '').slice(0, 8)}…`,
+  }));
+}
+
 /** 生成 92 查询票据：活动 id + 目标铺子 gid + 一次性 UUID。 */
 function buildShopTicket(gid: string, token: string): any {
   return { activity_id: ACTIVITY_ID, shop_gid: gid, nonce: token };
@@ -265,12 +341,20 @@ function extractShopToken(input: unknown): string {
 async function fetchShopQuote(gid: string, token = ''): Promise<any> {
   const isSelf = gid === ownGid();
   // 查他人铺子必须带服务端签发的票据（1.17.1.13 起），自己铺子不需要。
-  // 票据只随好友的分享卡片下发，拿不到就查不了——所以要调用方显式传进来。
+  // 优先级：显式传入 > 仓库里已采集的。
+  const effective = isSelf ? '' : (extractShopToken(token) || getShopTicket(gid));
   const params: Record<string, unknown> = isSelf
     ? { shop_gid: gid }
-    : { shop_gid: gid, ticket: buildShopTicket(gid, token) };
-  const reply = await operate(CMD_SHOP_QUERY, params);
-  return normalizeShop(reply.shop_192, gid);
+    : { shop_gid: gid, ticket: buildShopTicket(gid, effective) };
+  try {
+    const reply = await operate(CMD_SHOP_QUERY, params);
+    return normalizeShop(reply.shop_192, gid);
+  }
+  catch (error: any) {
+    // 票据失效就丢弃，避免一直用坏票
+    if (Number(error?.code) === FRIEND_QUERY_BLOCKED_CODE && effective) dropShopTicket(gid);
+    throw error;
+  }
 }
 
 /** 查询某个铺子的今日行情（自己或好友）。 */
@@ -283,6 +367,8 @@ async function getSweetPotatoShop(gidInput?: unknown, tokenInput?: unknown): Pro
   }
   const shop = await fetchShopQuote(gid, token);
   if (!shop.price && !shop.quota) throw businessError('SWEET_POTATO_SHOP_UNAVAILABLE', '暂时无法读取红薯铺子行情，请稍后重试');
+  // 查询成功说明票据有效，落库供后续比价复用。
+  if (token && gid !== ownGid()) saveShopTicket(gid, token, 'manual');
   return { ...shop, isSelf: gid === ownGid() };
 }
 
@@ -672,6 +758,7 @@ async function getFriendShopRanking(options: { force?: boolean; limit?: number }
         seen.add(friend.gid);
         return true;
       })
+      .filter((friend: any) => Boolean(getShopTicket(friend.gid)))
       .slice(0, maxFriends);
 
     const rows: any[] = [];
@@ -974,5 +1061,9 @@ module.exports = {
   triggerShareCrit,
   findBestFriendShop,
   getFriendShopRanking,
+  saveShopTicket,
+  getShopTicket,
+  dropShopTicket,
+  listShopTickets,
   runSweetPotatoAutomation,
 };
