@@ -341,3 +341,58 @@ if ((next.automation as any)[k] === undefined) continue;
 
 - 官方若放开（或给出分享卡片带 key 的通道），把 `FRIEND_QUERY_BLOCKED_CODE` 判定去掉即可恢复比价。
 - 若之后抓到「通过分享卡片进好友铺子」的请求体，按其中的新字段补齐 `Operate 92` 参数。
+## 十四、好友行情票据机制（2026-11-28 深挖）
+
+### 请求形态
+
+抓包（用户在游戏里打开好友铺子）后解密客户端请求，Operate 92 的参数结构变了：
+
+```text
+f192 = {
+  f1 = 1031121300                        目标铺子 gid
+  f2 = {                                 新增：票据
+    f1 = 2026111708                      活动 id
+    f2 = 1031121300                      目标铺子 gid
+    f3 = "1f35c32b-…-7dca64dd4baf"       服务端签发的 UUID
+  }
+}
+```
+
+对照：我们原先只发 f1，被拒 1034184。
+
+### 票据不是客户端随机生成
+
+| 实验 | 结果 |
+| --- | --- |
+| 随机 UUIDv4 填票据 | 仍 1034184 |
+| 回放抓到的那个 UUID | **成功：价 452（155+297）、额度 800** |
+
+而且这个 UUID 在本次抓包的所有回包里都搜不到（含 GetGroup / 92 回包，UUID 正则 0 命中），
+说明它只随好友的分享卡片下发（走 QQ 消息通道，不经游戏 WSS）。
+官方就是靠这个把「自动比价」堵死了：没有对方分享卡片就拿不到票据。
+
+### 我们做的适配
+
+| 层 | 改动 |
+| --- | --- |
+| proto | YshfShopTicket{activity_id, shop_gid, nonce}，YshfShopQueryParams 增加 ticket = 2 |
+| 服务 | getSweetPotatoShop(gid, token)：查他人铺子必须带票据，缺失抛 SWEET_POTATO_TICKET_REQUIRED；extractShopToken 支持从分享链接抽 UUID |
+| 接口 | POST /shop 接受 {gid, token} |
+| 前端 | 比价卡多一个「粘贴好友分享卡片里的票据」输入框 |
+| 自动化 | 仍保持受限降级：findBestFriendShop 在受限期返回 null，只卖自己铺子 |
+
+### 验证
+
+```text
+编码一致    带票据的请求与官方抓包逐字节相同（已固化为测试）
+不带票据    ok=false [SWEET_POTATO_TICKET_REQUIRED]
+带票据      ok=true 价 452（155+297）额度 800
+自动排行    restricted=true（符合预期）
+测试        sweet-potato.test.js 14 项全过
+```
+
+### 结论
+
+- 自动比价：协议层不可行（票据无法自取），保持受限降级。
+- 手动比价 / 卖好友：拿到好友分享卡片后可用——填 gid + 票据即可查价；出售通道本身不需要票据。
+- 若以后官方把票据放进某个回包，把 extractShopToken 换成从该回包取即可恢复自动比价。

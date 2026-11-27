@@ -707,8 +707,17 @@ message YshfShareReply {
     int64 field_6 = 6;
 }
 
+// 2026-11-28 客户端 1.17.1.13 起，查**他人**铺子必须带票据，否则返回 1034184。
+// 票据实测为嵌套消息：activity_id + shop_gid + UUIDv4（客户端每次现生成）。
+message YshfShopTicket {
+    int64 activity_id = 1;
+    int64 shop_gid = 2;
+    string nonce = 3;
+}
+
 message YshfShopQueryParams {
     int64 shop_gid = 1;
+    YshfShopTicket ticket = 2;
 }
 
 message YshfSellParams {

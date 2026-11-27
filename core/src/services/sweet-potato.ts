@@ -249,16 +249,39 @@ function normalizeShop(reply: any, fallbackGid = ''): any {
   };
 }
 
-async function fetchShopQuote(gid: string): Promise<any> {
-  const reply = await operate(CMD_SHOP_QUERY, { shop_gid: gid });
+/** 生成 92 查询票据：活动 id + 目标铺子 gid + 一次性 UUID。 */
+function buildShopTicket(gid: string, token: string): any {
+  return { activity_id: ACTIVITY_ID, shop_gid: gid, nonce: token };
+}
+
+/** 从分享链接/纯文本里抽出 8-4-4-4-12 形态的票据。 */
+function extractShopToken(input: unknown): string {
+  const raw = String(input ?? '').trim();
+  if (!raw) return '';
+  const match = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.exec(raw);
+  return match ? match[0].toLowerCase() : '';
+}
+
+async function fetchShopQuote(gid: string, token = ''): Promise<any> {
+  const isSelf = gid === ownGid();
+  // 查他人铺子必须带服务端签发的票据（1.17.1.13 起），自己铺子不需要。
+  // 票据只随好友的分享卡片下发，拿不到就查不了——所以要调用方显式传进来。
+  const params: Record<string, unknown> = isSelf
+    ? { shop_gid: gid }
+    : { shop_gid: gid, ticket: buildShopTicket(gid, token) };
+  const reply = await operate(CMD_SHOP_QUERY, params);
   return normalizeShop(reply.shop_192, gid);
 }
 
 /** 查询某个铺子的今日行情（自己或好友）。 */
-async function getSweetPotatoShop(gidInput?: unknown): Promise<any> {
+async function getSweetPotatoShop(gidInput?: unknown, tokenInput?: unknown): Promise<any> {
   const gid = toId(gidInput) || ownGid();
   if (!/^\d+$/.test(gid)) throw businessError('INVALID_SWEET_POTATO_GID', '玩家 GID 必须是正十进制整数');
-  const shop = await fetchShopQuote(gid);
+  const token = extractShopToken(tokenInput);
+  if (gid !== ownGid() && !token) {
+    throw businessError('SWEET_POTATO_TICKET_REQUIRED', '查看好友铺子需要对方分享卡片里的票据');
+  }
+  const shop = await fetchShopQuote(gid, token);
   if (!shop.price && !shop.quota) throw businessError('SWEET_POTATO_SHOP_UNAVAILABLE', '暂时无法读取红薯铺子行情，请稍后重试');
   return { ...shop, isSelf: gid === ownGid() };
 }
@@ -940,6 +963,7 @@ module.exports = {
   getSweetPotatoState,
   getSweetPotatoWindow,
   describeCatalogItem,
+  extractShopToken,
   getSweetPotatoShop,
   claimSweetPotatoSeeds,
   sellSweetPotato,

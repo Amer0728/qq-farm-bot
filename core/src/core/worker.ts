@@ -1170,7 +1170,7 @@ async function handleApiCall(msg: any): Promise<void> {
                     result = await require('../services/sweet-potato').getSweetPotatoState();
                     break;
                 case 'getSweetPotatoShop':
-                    result = await require('../services/sweet-potato').getSweetPotatoShop(args[0]);
+                    result = await require('../services/sweet-potato').getSweetPotatoShop(args[0], args[1]);
                     break;
                 case 'sellSweetPotato':
                     result = await require('../services/sweet-potato').sellSweetPotato({ gid: args[0], count: args[1] });

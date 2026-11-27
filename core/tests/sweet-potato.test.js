@@ -150,3 +150,30 @@ test('以薯换福：活动窗口与过期标记', () => {
     const before = getSweetPotatoWindow(1795500000);
     assert.equal(before.notStarted, true);
 });
+test('以薯换福：好友铺子票据从分享链接里抽取', () => {
+    const { extractShopToken } = require('../dist/services/sweet-potato');
+    const uuid = '1f35c32b-0358-46b3-8b18-7dca64dd4baf';
+    assert.equal(extractShopToken(uuid), uuid);
+    assert.equal(extractShopToken(`https://appservice.qq.com/x?ticket=${uuid.toUpperCase()}&x=1`), uuid);
+    assert.equal(extractShopToken('  '), '');
+    assert.equal(extractShopToken('no-ticket-here'), '');
+});
+
+test('以薯换福：带票据的查铺子请求与官方抓包逐字节一致', async () => {
+    await loadProto();
+    const body = Buffer.from(types.YshfOperateRequest.encode(types.YshfOperateRequest.create({
+        activity_id: '2026111708',
+        cmd: 92,
+        params_192: {
+            shop_gid: '1031121300',
+            ticket: {
+                activity_id: '2026111708',
+                shop_gid: '1031121300',
+                nonce: '1f35c32b-0358-46b3-8b18-7dca64dd4baf',
+            },
+        },
+    })).finish());
+    assert.equal(body.toString('hex'),
+        '08dc8590c607105c820c3a0894d3d6eb03123208dc8590c6071094d3d6eb031a24'
+        + '31663335633332622d303335382d343662332d386231382d376463613634646434626166');
+});

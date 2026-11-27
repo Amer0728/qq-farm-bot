@@ -92,6 +92,7 @@ const friendListLoading = ref(false)
 const friendRestricted = ref(false)
 const restrictedCode = ref(0)
 const friendGid = ref('')
+const friendToken = ref('')
 const friendShop = ref<ShopInfo | null>(null)
 const friendError = ref('')
 const friendLoading = ref(false)
@@ -241,7 +242,7 @@ async function loadFriend() {
   }
   friendLoading.value = true
   try {
-    const response = await api.post('/api/activity-center/sweet-potato/shop', { gid }, { skipErrorToast: true } as any)
+    const response = await api.post('/api/activity-center/sweet-potato/shop', { gid, token: friendToken.value.trim() }, { skipErrorToast: true } as any)
     if (!response.data?.ok) {
       friendError.value = getApiErrorMessage(response.data, '无法读取该玩家铺子')
       return
@@ -610,8 +611,9 @@ onMounted(refreshAll)
 
           <p v-if="friendError" class="sweet-panel__warn">{{ friendError }}</p>
           <p v-if="friendRestricted" class="sweet-panel__warn">
-            官方已限制查看好友铺子行情（错误码 {{ restrictedCode || 1034184 }}）。自己铺子、出售、兑换、收购记录都不受影响；
-            自动出售会退回只卖自己的铺子。
+            官方从 1.17.1.13 起要求好友铺子行情必须带<strong>对方分享卡片里的票据</strong>，无法自动获取（错误码 {{ restrictedCode || 1034184 }}）。
+            自己铺子、出售、兑换、收购记录不受影响；自动出售会退回只卖自己的铺子。
+            拿到好友分享链接后，把下面的 gid 和票据填上就能查价并卖给他。
           </p>
 
           <div v-if="bestFriend" class="sweet-friend">
@@ -639,7 +641,8 @@ onMounted(refreshAll)
           <p v-else-if="!friendListLoading && !friendRestricted" class="sweet-panel__meta">好友列表里没有可读取的铺子，或活动尚未开始。</p>
 
           <div class="sweet-panel__row">
-            <NInput v-model:value="friendGid" placeholder="或手动输入 GID 查询" size="small" class="sweet-gid" />
+            <NInput v-model:value="friendGid" placeholder="好友 GID" size="small" class="sweet-gid" />
+            <NInput v-model:value="friendToken" placeholder="粘贴好友分享卡片里的票据（UUID）" size="small" class="sweet-token" />
             <NButton size="small" :loading="friendLoading" @click="loadFriend">查询</NButton>
             <span v-if="friendShop" class="sweet-panel__meta">
               {{ friendShop.name || friendShop.gid }} · {{ friendShop.price }}/个 · 额度 {{ friendShop.quota }}
@@ -1166,7 +1169,11 @@ onMounted(refreshAll)
 }
 
 .sweet-gid {
-  width: 200px;
+  width: 160px;
+}
+
+.sweet-token {
+  width: 320px;
 }
 
 .sweet-select {

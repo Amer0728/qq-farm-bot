@@ -189,7 +189,7 @@ function createDataProvider(options: DataProviderOptions) {
         getCurrentQixiActivity: (accountRef: string) => callWorkerApi(resolveAccountRefId(accountRef), 'getCurrentQixiActivity'),
         // 以薯换福（2026-11-25 抓包还原）
         getSweetPotatoState: (accountRef: string) => callWorkerApi(resolveAccountRefId(accountRef), 'getSweetPotatoState'),
-        getSweetPotatoShop: (accountRef: string, gid: unknown) => callWorkerApi(resolveAccountRefId(accountRef), 'getSweetPotatoShop', gid),
+        getSweetPotatoShop: (accountRef: string, gid: unknown, token?: unknown) => callWorkerApi(resolveAccountRefId(accountRef), 'getSweetPotatoShop', gid, token),
         sellSweetPotato: (accountRef: string, gid: unknown, count: unknown) => callWorkerApi(resolveAccountRefId(accountRef), 'sellSweetPotato', gid, count),
         getSweetPotatoExchangeShop: (accountRef: string) => callWorkerApi(resolveAccountRefId(accountRef), 'getSweetPotatoExchangeShop'),
         exchangeSweetPotatoGoods: (accountRef: string, goodsId: unknown, count: unknown) => callWorkerApi(resolveAccountRefId(accountRef), 'exchangeSweetPotatoGoods', goodsId, count),

@@ -20,8 +20,9 @@ export function mountSweetPotatoRoutes({ app, ctx, withAccount, mountGet }: Acti
         ctx.provider.claimSweetPotatoSeeds(accountId)));
     app.post('/api/activity-center/sweet-potato/claim-commission', withAccount(accountId =>
         ctx.provider.claimSweetPotatoCommission(accountId)));
+    // token 来自好友分享卡片；官方 1.17.1.13 起查他人铺子必须带票据。
     app.post('/api/activity-center/sweet-potato/shop', withAccount((accountId, req: Request) =>
-        ctx.provider.getSweetPotatoShop(accountId, req.body?.gid)));
+        ctx.provider.getSweetPotatoShop(accountId, req.body?.gid, req.body?.token)));
     app.post('/api/activity-center/sweet-potato/sell', withAccount((accountId, req: Request) =>
         ctx.provider.sellSweetPotato(accountId, req.body?.gid, req.body?.count)));
     app.post('/api/activity-center/sweet-potato/settings', withAccount((accountId, req: Request) =>
