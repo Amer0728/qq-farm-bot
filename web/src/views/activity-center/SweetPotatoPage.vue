@@ -99,6 +99,7 @@ const friendGid = ref('')
 const friendToken = ref('')
 const probeGid = ref('')
 const probeLoading = ref(false)
+const probePreviewData = ref<any>(null)
 const friendShop = ref<ShopInfo | null>(null)
 const friendError = ref('')
 const friendLoading = ref(false)
@@ -277,7 +278,36 @@ async function harvestTickets() {
   }
 }
 
-/** 探价：卖 1 个蜜薯给目标铺子，读回真实单价（无需票据，但消耗库存与对方额度）。 */
+/** 第一步：预估（只读，不消耗）。已经探过或没库存就不往下走。 */
+async function previewProbe() {
+  const gid = probeGid.value.trim()
+  if (!/^\d+$/.test(gid)) {
+    toast.error('请输入正确的玩家 GID')
+    return
+  }
+  probeLoading.value = true
+  try {
+    const response = await api.post('/api/activity-center/sweet-potato/probe/preview', { gid }, { skipErrorToast: true } as any)
+    if (!response.data?.ok) {
+      toast.error(getApiErrorMessage(response.data, '读取探价预估失败'))
+      return
+    }
+    const data = response.data.data
+    probePreviewData.value = data
+    if (data.alreadyProbedToday)
+      notice.value = `今天已经探过这家：${data.todayPrice}/个，不用再花蜜薯`
+    else if (data.inventory < 1)
+      notice.value = '背包里没有蜜薯，先收一批再来探价'
+  }
+  catch (cause: any) {
+    toast.error(getApiErrorMessage(cause, '读取探价预估失败'))
+  }
+  finally {
+    probeLoading.value = false
+  }
+}
+
+/** 第二步：确认探价（卖 1 个蜜薯换真实单价）。 */
 async function probePrice(force = false) {
   const gid = probeGid.value.trim()
   if (!/^\d+$/.test(gid)) {
@@ -295,6 +325,7 @@ async function probePrice(force = false) {
     notice.value = data.cached
       ? `该铺子今天已探过价：${data.price}/个（未消耗蜜薯）`
       : `探价成功：${data.price}/个（消耗 ${data.spent} 个蜜薯，收入 ${data.gain} 福气币）`
+    probePreviewData.value = null
     await Promise.all([load(), loadFriends(false)])
   }
   catch (cause: any) {
@@ -715,6 +746,18 @@ onMounted(async () => {
             </div>
           </div>
 
+          <div v-if="probePreviewData" class="sweet-friend">
+            <span class="sweet-friend__name">探价预估 {{ probePreviewData.gid }}</span>
+            <span class="sweet-status" :class="probePreviewData.canProbe ? 'is-done' : 'is-idle'">
+              库存 {{ probePreviewData.inventory }}
+              · {{ probePreviewData.alreadyProbedToday ? `今日已探 ${probePreviewData.todayPrice}` : `将消耗 ${probePreviewData.willSpend} 个蜜薯` }}
+              · 自己铺子 {{ probePreviewData.own?.price }}
+              <template v-if="probePreviewData.historyMax"> · 历史最高 {{ probePreviewData.historyMax }}</template>
+            </span>
+            <span v-if="probePreviewData.history?.length" class="sweet-panel__meta">
+              最近：{{ probePreviewData.history.slice(0, 3).map((h: any) => `${h.day} ${h.price}`).join(' / ') }}
+            </span>
+          </div>
           <p v-if="friendError" class="sweet-panel__warn">{{ friendError }}</p>
           <p v-if="friendRestricted" class="sweet-panel__warn">
             官方从 1.17.1.13 起要求好友铺子行情必须带<strong>对方分享卡片里的票据</strong>，无法自动获取（错误码 {{ restrictedCode || 1034184 }}）。
@@ -752,7 +795,17 @@ onMounted(async () => {
             <NButton size="small" :loading="friendLoading" @click="loadFriend">查询</NButton>
             <span class="sweet-panel__hint">|</span>
             <NInput v-model:value="probeGid" placeholder="探价 GID" size="small" class="sweet-gid" />
-            <NButton size="small" :loading="probeLoading" @click="probePrice(false)">探价（卖 1 个）</NButton>
+            <NButton size="small" :loading="probeLoading" @click="previewProbe">预估</NButton>
+            <NButton
+              v-if="probePreviewData"
+              size="small"
+              type="primary"
+              :disabled="!probePreviewData.canProbe"
+              :loading="probeLoading"
+              @click="probePrice(false)"
+            >
+              确认探价（花 {{ probePreviewData.willSpend }} 个蜜薯）
+            </NButton>
             <span v-if="friendShop" class="sweet-panel__meta">
               {{ friendShop.name || friendShop.gid }} · {{ friendShop.price }}/个 · 额度 {{ friendShop.quota }}
               · {{ friendShop.price > price ? `比我高 ${friendShop.price - price}` : friendShop.price < price ? `比我低 ${price - friendShop.price}` : '与我一致' }}

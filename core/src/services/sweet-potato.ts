@@ -371,12 +371,57 @@ function persistPriceStore(): void {
   fs.renameSync(tmp, file);
 }
 
+const PRICE_HISTORY_MAX = 30;
+
 function saveShopPrice(gidInput: unknown, price: number, quota: number): void {
   const gid = toId(gidInput);
   if (!/^\d+$/.test(gid) || !(price > 0)) return;
   const store = loadPriceStore();
-  store[gid] = { price: Math.round(price), quota: toNum(quota), day: serverDayKey(), at: Date.now() };
+  const day = serverDayKey();
+  const at = Date.now();
+  const history: any[] = Array.isArray(store[gid]?.history) ? store[gid].history : [];
+  if (!history.some((row: any) => row?.day === day)) history.push({ day, price: Math.round(price), at });
+  store[gid] = {
+    price: Math.round(price),
+    quota: toNum(quota),
+    day,
+    at,
+    history: history.slice(-PRICE_HISTORY_MAX),
+  };
   persistPriceStore();
+}
+
+/** 某铺子的探价历史（最近在前）。 */
+function getShopPriceHistory(gidInput: unknown): any[] {
+  const gid = toId(gidInput);
+  const history: any[] = Array.isArray(loadPriceStore()[gid]?.history) ? loadPriceStore()[gid].history : [];
+  return [...history].reverse().map((row: any) => ({ day: String(row?.day || ''), price: toNum(row?.price), at: toNum(row?.at) }));
+}
+
+/**
+ * 探价前预估：这次探会不会花蜜薯、今天是不是已经探过、历史上探到过多少、自己铺子多少。
+ * 只读，不消耗任何资源。
+ */
+async function probePreview(gidInput: unknown): Promise<any> {
+  const gid = toId(gidInput);
+  if (!/^\d+$/.test(gid)) throw businessError('INVALID_SWEET_POTATO_GID', '玩家 GID 必须是正十进制整数');
+  const bag = await getBagCached();
+  const inventory = bagItemCount(bag, ITEM_SWEET_POTATO);
+  const today = getShopPrice(gid);
+  const history = getShopPriceHistory(gid);
+  const own = await getSweetPotatoShop();
+  return {
+    gid,
+    inventory,
+    todayPrice: today ? today.price : 0,
+    alreadyProbedToday: Boolean(today),
+    willSpend: today ? 0 : 1,
+    canProbe: !today && inventory >= 1 && gid !== ownGid(),
+    history,
+    own: { gid: own.gid, price: own.price },
+    // 历史最高价用来判断值得不值得卖给他
+    historyMax: history.reduce((max: number, row: any) => Math.max(max, toNum(row?.price)), 0),
+  };
 }
 
 /** 取当天有效的探价结果。 */
@@ -1194,7 +1239,9 @@ module.exports = {
   dropShopTicket,
   listShopTickets,
   probeFriendShopPrice,
+  probePreview,
   getShopPrice,
+  getShopPriceHistory,
   listShopPrices,
   runSweetPotatoAutomation,
 };

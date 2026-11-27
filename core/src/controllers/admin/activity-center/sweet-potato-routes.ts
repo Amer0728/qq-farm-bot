@@ -62,6 +62,8 @@ export function mountSweetPotatoRoutes({ app, ctx, withAccount, mountGet }: Acti
     mountGet('/api/activity-center/sweet-potato/tickets', 'getSweetPotatoTickets');
     // 探价：卖 1 个蜜薯换真实单价（无需票据，但会消耗库存与对方额度）
     mountGet('/api/activity-center/sweet-potato/prices', 'getSweetPotatoPrices');
+    app.post('/api/activity-center/sweet-potato/probe/preview', withAccount((accountId, req: Request) =>
+        ctx.provider.getSweetPotatoProbePreview(accountId, req.body?.gid)));
     app.post('/api/activity-center/sweet-potato/probe', withAccount((accountId, req: Request) =>
         ctx.provider.probeSweetPotatoPrice(accountId, req.body?.gid, { force: req.body?.force === true })));
     app.post('/api/activity-center/sweet-potato/tickets', withAccount((accountId, req: Request) =>
