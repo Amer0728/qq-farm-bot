@@ -92,6 +92,9 @@ const friendListLoading = ref(false)
 const friendRestricted = ref(false)
 const restrictedCode = ref(0)
 const harvesting = ref(false)
+const autoHarvesting = ref(false)
+const autoStat = ref<any>(null)
+let autoTimer: any = null
 const friendGid = ref('')
 const friendToken = ref('')
 const friendShop = ref<ShopInfo | null>(null)
@@ -209,6 +212,44 @@ async function loadFriends(force = false) {
   finally {
     friendListLoading.value = false
   }
+}
+
+/** 自动采集：开着它就在游戏里随便点开好友铺子，扫到票自动入库。 */
+async function toggleAutoHarvest(on: boolean) {
+  try {
+    const response = await api.post('/api/activity-center/sweet-potato/harvest/auto', { on }, { skipErrorToast: true } as any)
+    if (!response.data?.ok) {
+      toast.error(getApiErrorMessage(response.data, '切换自动采集失败'))
+      return
+    }
+    autoHarvesting.value = on
+    if (autoTimer) { clearInterval(autoTimer); autoTimer = null }
+    if (on) {
+      toast.success('自动采集已开启：在游戏里点开好友铺子即可')
+      autoTimer = setInterval(refreshAutoStat, 5000)
+      await refreshAutoStat()
+    }
+    else {
+      toast.info('自动采集已关闭')
+      await refreshAutoStat()
+    }
+  }
+  catch (cause: any) {
+    toast.error(getApiErrorMessage(cause, '切换自动采集失败'))
+  }
+}
+
+async function refreshAutoStat() {
+  try {
+    const response = await api.get('/api/activity-center/sweet-potato/harvest/auto', { skipErrorToast: true } as any)
+    if (response.data?.ok) {
+      autoStat.value = response.data.data
+      autoHarvesting.value = response.data.data?.running === true
+      if (autoHarvesting.value && Number(autoStat.value?.saved) > 0)
+        void loadFriends(false)
+    }
+  }
+  catch {}
 }
 
 /** 从 QQ 渲染进程内存只读采集票据（需先在游戏里打开过好友铺子）。 */
@@ -438,7 +479,10 @@ async function refreshAll() {
   await Promise.all([load(), loadExchange(), loadFriends()])
 }
 
-onMounted(refreshAll)
+onMounted(async () => {
+  await refreshAll()
+  await refreshAutoStat()
+})
 </script>
 <template>
   <section class="sweet">
@@ -629,6 +673,13 @@ onMounted(refreshAll)
             <h2>好友铺子比价</h2>
             <div class="sweet-panel__row">
               <span class="sweet-panel__hint">{{ friendMeta || '按对方铺子当日收购价结算' }}</span>
+              <span v-if="autoHarvesting" class="sweet-panel__hint">
+                自动采集中 · 已入库 {{ autoStat?.saved ?? 0 }} 位
+              </span>
+              <NSwitch :value="autoHarvesting" size="small" @update:value="toggleAutoHarvest">
+                <template #checked>自动</template>
+                <template #unchecked>自动</template>
+              </NSwitch>
               <NButton size="tiny" :loading="harvesting" @click="harvestTickets">采集票据</NButton>
               <NButton size="tiny" :loading="friendListLoading" @click="loadFriends(true)">同步好友</NButton>
             </div>

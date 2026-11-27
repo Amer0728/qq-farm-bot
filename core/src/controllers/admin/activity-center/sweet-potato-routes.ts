@@ -32,6 +32,22 @@ function harvestTicketsFromMemory(): Promise<{ found: number, tickets: Array<{ a
     });
 }
 
+/** 自动采集状态（面板进程内单例）：每 3 秒扫一次渲染进程，扫到新票据就入库。 */
+const autoHarvest: { timer: any, accountId: string, rounds: number, saved: number, lastAt: number, error: string } = {
+    timer: null, accountId: '', rounds: 0, saved: 0, lastAt: 0, error: '',
+};
+
+async function harvestOnce(ctx: any, accountId: string): Promise<number> {
+    const result = await harvestTicketsFromMemory();
+    let saved = 0;
+    for (const item of result.tickets) {
+        if (String(item?.activity) !== '2026111708') continue;
+        const ok = await ctx.provider.saveSweetPotatoTicket(accountId, item.gid, item.ticket);
+        if (ok?.saved) saved += 1;
+    }
+    return saved;
+}
+
 export function mountSweetPotatoRoutes({ app, ctx, withAccount, mountGet }: ActivityRouteContext): void {
     mountGet('/api/activity-center/sweet-potato', 'getSweetPotatoState');
     mountGet('/api/activity-center/sweet-potato/exchange', 'getSweetPotatoExchangeShop');
@@ -57,6 +73,42 @@ export function mountSweetPotatoRoutes({ app, ctx, withAccount, mountGet }: Acti
         }
         return { found: result.found, saved: saved.length, gids: saved };
     }));
+    // 自动采集：开着它，用户在游戏里点开谁家铺子就自动入库，不用手动点按钮。
+    app.post('/api/activity-center/sweet-potato/harvest/auto', withAccount(async (accountId, req: Request) => {
+        const on = req.body?.on === true;
+        if (autoHarvest.timer) { clearInterval(autoHarvest.timer); autoHarvest.timer = null; }
+        if (!on) return { running: false, rounds: autoHarvest.rounds, saved: autoHarvest.saved };
+        autoHarvest.accountId = String(accountId);
+        autoHarvest.rounds = 0;
+        autoHarvest.saved = 0;
+        autoHarvest.error = '';
+        autoHarvest.timer = setInterval(() => {
+            void (async () => {
+                autoHarvest.rounds += 1;
+                autoHarvest.lastAt = Date.now();
+                try {
+                    const saved = await harvestOnce(ctx, autoHarvest.accountId);
+                    autoHarvest.saved += saved;
+                }
+                catch (error: any) {
+                    autoHarvest.error = String(error?.message || error).slice(0, 200);
+                }
+                // 30 分钟兜底自动关，避免一直挂着扫内存
+                if (autoHarvest.rounds > 600 && autoHarvest.timer) {
+                    clearInterval(autoHarvest.timer);
+                    autoHarvest.timer = null;
+                }
+            })();
+        }, 3000);
+        return { running: true };
+    }));
+    app.get('/api/activity-center/sweet-potato/harvest/auto', withAccount(async () => ({
+        running: Boolean(autoHarvest.timer),
+        rounds: autoHarvest.rounds,
+        saved: autoHarvest.saved,
+        lastAt: autoHarvest.lastAt,
+        error: autoHarvest.error,
+    })));
     // 好友铺子比价：自动从 QQ 好友列表取 GID；?force=1 才重新扫（默认走缓存）。
     app.get('/api/activity-center/sweet-potato/friends', withAccount((accountId, req: Request) =>
         ctx.provider.getSweetPotatoFriendRanking(accountId, {
