@@ -55,6 +55,9 @@ interface SweetPotatoSettings {
   sellAfterTime: string
   scanFriendLimit: number
   scanIntervalMinutes: number
+  autoProbe: boolean
+  autoProbeMaxPerRound: number
+  autoProbeMinRatio: number
 }
 
 const tierOptions = [
@@ -81,6 +84,9 @@ const settings = ref<SweetPotatoSettings>({
   sellAfterTime: '',
   scanFriendLimit: 20,
   scanIntervalMinutes: 120,
+  autoProbe: false,
+  autoProbeMaxPerRound: 2,
+  autoProbeMinRatio: 110,
 })
 const records = ref<any[]>([])
 const recordsLoading = ref(false)
@@ -851,6 +857,18 @@ onMounted(async () => {
             <label class="sweet-form__row">
               <span>比价好友数</span>
               <NInputNumber v-model:value="settings.scanFriendLimit" :min="1" :max="60" size="small" class="sweet-num" :show-button="false" />
+            </label>
+            <label class="sweet-form__row">
+              <span>自动探价（花蜜薯换真实价）</span>
+              <NSwitch v-model:value="settings.autoProbe" size="small" />
+            </label>
+            <label class="sweet-form__row">
+              <span>每轮最多探几家</span>
+              <NInputNumber v-model:value="settings.autoProbeMaxPerRound" :min="1" :max="5" size="small" class="sweet-num" :show-button="false" />
+            </label>
+            <label class="sweet-form__row">
+              <span>探到高于自己铺子（%）才卖</span>
+              <NInputNumber v-model:value="settings.autoProbeMinRatio" :min="100" :max="500" size="small" class="sweet-num" :show-button="false" />
             </label>
             <label class="sweet-form__row">
               <span>比价缓存（分钟）</span>

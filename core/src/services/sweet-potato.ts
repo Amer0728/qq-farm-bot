@@ -94,6 +94,12 @@ interface SweetPotatoSettings {
   sellAfterTime: string;
   scanFriendLimit: number;
   scanIntervalMinutes: number;
+  /** 自动探价：拿不到票据时，卖 1 个蜜薯换真实价（会消耗库存）。默认关闭。 */
+  autoProbe: boolean;
+  /** 单轮最多探几家，默认 2。 */
+  autoProbeMaxPerRound: number;
+  /** 只有探到的价 ≥ 自己铺子价 × 该百分比时才卖，默认 110（即高 10%）。 */
+  autoProbeMinRatio: number;
 }
 
 const DEFAULT_SETTINGS: SweetPotatoSettings = {
@@ -106,6 +112,9 @@ const DEFAULT_SETTINGS: SweetPotatoSettings = {
   sellAfterTime: '',
   scanFriendLimit: 20,
   scanIntervalMinutes: 120,
+  autoProbe: false,
+  autoProbeMaxPerRound: 2,
+  autoProbeMinRatio: 110,
 };
 
 /**
@@ -989,6 +998,30 @@ async function getFriendShopRanking(options: { force?: boolean; limit?: number }
   };
 }
 
+/**
+ * 挑探价候选：只考虑
+ *   - 有历史探价记录（说明是我们真的关心过的铺子）
+ *   - 今天还没探过（价格缓存当天有效，避免重复花钱）
+ *   - 没有票据（有票就不用花蜜薯了）
+ * 按历史最高价降序，取前 budget 家。
+ */
+function listProbeCandidates(settings: SweetPotatoSettings, budget: number): Array<{ gid: string, historyMax: number }> {
+  const store = loadPriceStore();
+  const rows: Array<{ gid: string, historyMax: number }> = [];
+  for (const [gid, row] of Object.entries(store)) {
+    if (!/^\d+$/.test(gid)) continue;
+    if (gid === ownGid()) continue;
+    if (getShopTicket(gid)) continue;
+    if (getShopPrice(gid)) continue;
+    const history: any[] = Array.isArray((row as any)?.history) ? (row as any).history : [];
+    const historyMax = history.reduce((max: number, item: any) => Math.max(max, toNum(item?.price)), 0);
+    if (historyMax <= 0) continue;
+    rows.push({ gid, historyMax });
+  }
+  rows.sort((left, right) => right.historyMax - left.historyMax);
+  return rows.slice(0, Math.max(1, budget));
+}
+
 function readSweetPotatoSettings(accountId?: unknown): SweetPotatoSettings {
   const stored = loadSettingsMap()[settingsAccountKey(accountId)] || {};
   // 活动结束后开关一律按关闭处理：历史配置不允许把定时任务再拉起来。
@@ -999,6 +1032,8 @@ function readSweetPotatoSettings(accountId?: unknown): SweetPotatoSettings {
   const friendLimit = Number(stored.scanFriendLimit);
   const scanInterval = Number(stored.scanIntervalMinutes);
   const afterTime = String(stored.sellAfterTime ?? '').trim();
+  const probeMax = Number(stored.autoProbeMaxPerRound);
+  const probeRatio = Number(stored.autoProbeMinRatio);
   return {
     autoSell: window.active && stored.autoSell === true,
     priceTier: tier as SweetPotatoSettings['priceTier'],
@@ -1009,6 +1044,9 @@ function readSweetPotatoSettings(accountId?: unknown): SweetPotatoSettings {
     sellAfterTime: /^(\d{1,2})[:：](\d{1,2})$/.test(afterTime) ? afterTime.replace('：', ':') : '',
     scanFriendLimit: Number.isFinite(friendLimit) && friendLimit >= 1 ? Math.min(60, Math.floor(friendLimit)) : DEFAULT_SETTINGS.scanFriendLimit,
     scanIntervalMinutes: Number.isFinite(scanInterval) && scanInterval >= 5 ? Math.min(720, Math.floor(scanInterval)) : DEFAULT_SETTINGS.scanIntervalMinutes,
+    autoProbe: window.active && stored.autoProbe === true,
+    autoProbeMaxPerRound: Number.isFinite(probeMax) && probeMax >= 1 ? Math.min(5, Math.floor(probeMax)) : DEFAULT_SETTINGS.autoProbeMaxPerRound,
+    autoProbeMinRatio: Number.isFinite(probeRatio) && probeRatio >= 100 ? Math.min(500, Math.floor(probeRatio)) : DEFAULT_SETTINGS.autoProbeMinRatio,
   };
 }
 
@@ -1041,6 +1079,17 @@ function saveSweetPotatoSettings(input: any = {}, accountId?: unknown): any {
     const minutes = Number(input.scanIntervalMinutes);
     if (!Number.isFinite(minutes) || minutes < 5 || minutes > 720 || !Number.isInteger(minutes)) throw businessError('INVALID_SWEET_POTATO_SCAN_INTERVAL', '比价间隔必须是 5~720 的整数分钟');
     patch.scanIntervalMinutes = minutes;
+  }
+  if (input.autoProbe !== undefined) patch.autoProbe = input.autoProbe === true;
+  if (input.autoProbeMaxPerRound !== undefined) {
+    const max = Number(input.autoProbeMaxPerRound);
+    if (!Number.isFinite(max) || max < 1 || max > 5 || !Number.isInteger(max)) throw businessError('INVALID_SWEET_POTATO_PROBE_MAX', '每轮探价家数必须是 1~5 的整数');
+    patch.autoProbeMaxPerRound = max;
+  }
+  if (input.autoProbeMinRatio !== undefined) {
+    const ratio = Number(input.autoProbeMinRatio);
+    if (!Number.isFinite(ratio) || ratio < 100 || ratio > 500 || !Number.isInteger(ratio)) throw businessError('INVALID_SWEET_POTATO_PROBE_RATIO', '探价溢价阈值必须是 100~500 的整数百分比');
+    patch.autoProbeMinRatio = ratio;
   }
   if (input.sellAfterTime !== undefined) {
     const raw = String(input.sellAfterTime ?? '').trim();
@@ -1113,6 +1162,43 @@ async function runSweetPotatoAutomation(options: { manual?: boolean } = {}): Pro
     steps.push({ step: 'share_crit', skipped: 'already_active', bonusPrice: shop.bonusPrice });
   }
 
+  // 2.5) 自动探价：拿不到票据的好友里，挑历史价最高的几家各卖 1 个蜜薯换真实价。
+  // 护栏：默认关闭；单轮上限可配；库存必须够「保留量 + 探价消耗」；探自己铺子永不触发。
+  if (settings.autoProbe && !friendQueryRestricted()) {
+    const bagForProbe = await getBagCached(true);
+    const ownedForProbe = bagItemCount(bagForProbe, ITEM_SWEET_POTATO);
+    const budget = Math.min(
+      settings.autoProbeMaxPerRound,
+      Math.max(0, ownedForProbe - settings.keepCount),
+    );
+    if (budget <= 0) {
+      steps.push({ step: 'probe_skipped', reason: 'no_budget', owned: ownedForProbe, keepCount: settings.keepCount });
+    }
+    else {
+      const candidatesForProbe = listProbeCandidates(settings, budget);
+      if (!candidatesForProbe.length) {
+        steps.push({ step: 'probe_skipped', reason: 'no_candidate' });
+      }
+      for (const candidate of candidatesForProbe) {
+        try {
+          const probed = await probeFriendShopPrice(candidate.gid, { force: false });
+          steps.push({
+            step: 'probe',
+            gid: probed.gid,
+            price: probed.price,
+            spent: probed.spent,
+            cached: probed.cached,
+            historyMax: candidate.historyMax,
+            ownPrice: shop.price,
+          });
+        }
+        catch (error: any) {
+          steps.push({ step: 'probe', gid: candidate.gid, error: String(error?.message || error).slice(0, 120) });
+        }
+      }
+    }
+  }
+
   // 3) 出售（受时间闸门与档位条件约束）
   // 手动跑一轮也遵守开关：自动出售没开就只做判断、不真卖，
   // 避免误点「立即执行一轮」把蜜薯全卖掉。
@@ -1135,7 +1221,13 @@ async function runSweetPotatoAutomation(options: { manual?: boolean } = {}): Pro
       let bestFriend: any = null;
       if (settings.sellToBestFriend) {
         bestFriend = await findBestFriendShop(sellable);
-        if (bestFriend && bestFriend.price > shop.price && bestFriend.canSell !== false) target = bestFriend;
+        if (bestFriend && bestFriend.canSell !== false) {
+          // 探价来的价格要过溢价阈值才卖，避免为了一条情报又低价出掉整批
+          const ratio = toNum(bestFriend.price) / Math.max(1, toNum(shop.price)) * 100;
+          const threshold = settings.autoProbeMinRatio;
+          if (toNum(bestFriend.price) > toNum(shop.price) && ratio >= threshold) target = bestFriend;
+          else steps.push({ step: 'sell_target_rejected', gid: bestFriend.gid, price: bestFriend.price, ownPrice: shop.price, ratio: Math.round(ratio), threshold });
+        }
       }
       const result = await sellSweetPotato({ gid: target.gid, count: sellable });
       steps.push({
